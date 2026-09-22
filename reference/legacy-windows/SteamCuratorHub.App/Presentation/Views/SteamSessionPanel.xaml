@@ -1,0 +1,199 @@
+<UserControl x:Class="SteamCuratorHub.Presentation.Views.SteamSessionPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             Loaded="OnLoaded"
+             Unloaded="OnUnloaded"
+             DataContextChanged="OnDataContextChanged"
+             MinHeight="680"
+             Background="Transparent"
+             SnapsToDevicePixels="True">
+    <Border Style="{DynamicResource CardBorder}"
+            Padding="0"
+            Margin="0,14,0,0"
+            ClipToBounds="True">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*" MinHeight="480"/>
+            </Grid.RowDefinitions>
+
+            <!-- Session status and account controls -->
+            <Grid Margin="18,16,18,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="280"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="22"
+                                Height="22"
+                                CornerRadius="11"
+                                Background="{DynamicResource Brush.SurfaceElevated}"
+                                Margin="0,0,9,0">
+                            <Ellipse x:Name="SessionIndicator"
+                                     Width="8"
+                                     Height="8"
+                                     Fill="{DynamicResource Brush.TextMuted}"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock x:Name="SessionStatusText"
+                                   Text="Steam web session"
+                                   Foreground="{DynamicResource Brush.TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock x:Name="CurrentAddressText"
+                               Foreground="{DynamicResource Brush.TextMuted}"
+                               FontSize="11"
+                               Margin="31,4,0,0"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <WrapPanel Grid.Column="1"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center">
+                    <Button x:Name="SignInButton"
+                            Content="Sign in"
+                            Click="SignIn_Click"
+                            Style="{DynamicResource PrimaryButton}"
+                            Padding="13,7"
+                            Margin="6,0,0,0"/>
+                    <Button x:Name="VerifyIdentityButton"
+                            Content="Verify identity"
+                            Click="VerifyIdentity_Click"
+                            Style="{DynamicResource SecondaryButton}"
+                            Padding="13,7"
+                            Margin="6,0,0,0"/>
+                    <Button x:Name="RefreshButton"
+                            Content="Refresh"
+                            Click="Refresh_Click"
+                            Style="{DynamicResource GhostButton}"
+                            Padding="11,7"
+                            Margin="6,0,0,0"/>
+                    <Button x:Name="ClearSessionButton"
+                            Content="Sign out"
+                            Click="ClearSession_Click"
+                            Style="{DynamicResource GhostButton}"
+                            Foreground="{DynamicResource Brush.Danger}"
+                            Padding="11,7"
+                            Margin="6,0,0,0"/>
+                </WrapPanel>
+            </Grid>
+
+            <!-- Publishing console -->
+            <Border Grid.Row="1"
+                    Background="{DynamicResource Brush.SurfaceElevated}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="0,1,0,1"
+                    Padding="18,14">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="STEAM"
+                                   Style="{DynamicResource EyebrowText}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,14,0"/>
+                        <Button x:Name="OpenLongReviewButton"
+                                Content="Open long review"
+                                Click="OpenLongReview_Click"
+                                Style="{DynamicResource SecondaryButton}"
+                                Padding="12,7"
+                                Margin="0,0,6,0"/>
+                        <Button x:Name="OpenCuratorAdminButton"
+                                Content="Curator dashboard"
+                                Click="OpenCuratorAdmin_Click"
+                                Style="{DynamicResource GhostButton}"
+                                Padding="12,7"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="CURATOR ID"
+                                   Style="{DynamicResource EyebrowText}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,10,0"/>
+                        <TextBox x:Name="CuratorIdentifierBox"
+                                 Width="190"
+                                 Style="{DynamicResource InputTextBox}"
+                                 Padding="10,7"
+                                 Margin="0,0,6,0"
+                                 ToolTip="Curator ID or URL identifier"/>
+                        <Button x:Name="OpenCuratorReviewButton"
+                                Content="Open curator review"
+                                Click="OpenCuratorReview_Click"
+                                Style="{DynamicResource SecondaryButton}"
+                                Padding="12,7"/>
+                    </StackPanel>
+
+                    <WrapPanel Grid.Row="2"
+                               Grid.ColumnSpan="2"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               Margin="0,10,0,0">
+                        <Button x:Name="MarkLongPublishedButton"
+                                Content="Confirm long review"
+                                Click="MarkLongPublished_Click"
+                                Style="{DynamicResource GhostButton}"
+                                Padding="11,7"
+                                Margin="5,0,0,0"/>
+                        <Button x:Name="MarkShortPublishedButton"
+                                Content="Confirm curator review"
+                                Click="MarkShortPublished_Click"
+                                Style="{DynamicResource GhostButton}"
+                                Padding="11,7"
+                                Margin="5,0,0,0"/>
+                        <Button x:Name="MarkCopyClaimedButton"
+                                Content="Confirm copy"
+                                Click="MarkCopyClaimed_Click"
+                                Style="{DynamicResource GhostButton}"
+                                Padding="11,7"
+                                Margin="5,0,0,0"/>
+                    </WrapPanel>
+                </Grid>
+            </Border>
+
+            <TextBlock x:Name="BrowserMessageText"
+                       Grid.Row="2"
+                       Foreground="{DynamicResource Brush.Danger}"
+                       Background="{DynamicResource Brush.SurfaceElevated}"
+                       FontSize="12"
+                       Padding="18,8"
+                       TextWrapping="Wrap">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <Border Grid.Row="3"
+                    Background="{DynamicResource Brush.AppBackground}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="0,1,0,0"
+                    ClipToBounds="True">
+                <wv2:WebView2 x:Name="SteamBrowser"
+                              MinHeight="480"
+                              DefaultBackgroundColor="#0B111B"/>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

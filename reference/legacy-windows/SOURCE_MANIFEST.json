@@ -1,0 +1,502 @@
+[
+  {
+    "path": "SteamCuratorHub.App/App.xaml",
+    "bytes": 65513,
+    "sha256": "f42da417247a058d41845747e0b22acbece24ddd790d93ed6a122cae36fa2ac1"
+  },
+  {
+    "path": "SteamCuratorHub.App/App.xaml.cs",
+    "bytes": 240,
+    "sha256": "6ba44fd1fa0857690a1e5c1ef873e6987789b961c42a3d341ad0f155f0d51127"
+  },
+  {
+    "path": "SteamCuratorHub.App/AppMessageDialog.xaml",
+    "bytes": 6211,
+    "sha256": "d64400bd531b77ddbb0ee7f7684dce5ae38df844989c4db976c1f4efd643ff4f"
+  },
+  {
+    "path": "SteamCuratorHub.App/AppMessageDialog.xaml.cs",
+    "bytes": 4410,
+    "sha256": "4b189d3db1eba47ac7a3dd00425af71f6d75572ecbfbde38723af4bdcc822f39"
+  },
+  {
+    "path": "SteamCuratorHub.App/AssemblyInfo.cs",
+    "bytes": 643,
+    "sha256": "3fac2af92385f676e9a941befd23fe38f0a5fa6167d4a3a88f07e730c5595ca3"
+  },
+  {
+    "path": "SteamCuratorHub.App/CreateTaskDialog.xaml",
+    "bytes": 6680,
+    "sha256": "151f71eb629db9d62f33931ba3ef264f6b8921c08a6b3a420e91688ae3679578"
+  },
+  {
+    "path": "SteamCuratorHub.App/CreateTaskDialog.xaml.cs",
+    "bytes": 3425,
+    "sha256": "35e69d74df1a995f4b5bdadc1bc9648f735c58e1970f62ce9acfdb021f771f26"
+  },
+  {
+    "path": "SteamCuratorHub.App/MainWindow.xaml",
+    "bytes": 59595,
+    "sha256": "2d79b7931d8b66fd2242f374ebc2e836aa928831630097c45540e63c70b95ea9"
+  },
+  {
+    "path": "SteamCuratorHub.App/MainWindow.xaml.cs",
+    "bytes": 9861,
+    "sha256": "641c4678e43134ff81d1327ec206c5ba0b726f7da3b50606fb853a6a9f3b09c3"
+  },
+  {
+    "path": "SteamCuratorHub.App/QuickCreateTaskDialog.xaml",
+    "bytes": 18866,
+    "sha256": "f9cc03d467b5218f01babcb4ca56f8c693ef5e083bdc6790dcfe4cd557685b96"
+  },
+  {
+    "path": "SteamCuratorHub.App/QuickCreateTaskDialog.xaml.cs",
+    "bytes": 10300,
+    "sha256": "53c2081f7b308bc7c5a5b88bbe29965f8064c1ce390a10b546479583a866bb47"
+  },
+  {
+    "path": "SteamCuratorHub.App/SteamCuratorHub.App.csproj",
+    "bytes": 605,
+    "sha256": "3cc4aa4e35cab6eff5c31be1426caabce23f003e29e0809f244cf00c1aaf04e5"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/GlobalUsings.Publishing.cs",
+    "bytes": 44,
+    "sha256": "37434dcd2b03d7e031ec0014c40a1dab4abe13b478673ba99410bc9dc8922c51"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/IAchievementRefreshService.cs",
+    "bytes": 1062,
+    "sha256": "ebf7d428836eeb542daa470509a62f45d4747a607f144fa286b10450884b8085"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/IAiServiceStatus.cs",
+    "bytes": 260,
+    "sha256": "f8205ffa886f5e8ee8b5c012f445fb0627434b1c6648e54e820294dcd37196f1"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/IAiSummaryService.cs",
+    "bytes": 197,
+    "sha256": "7904b0dda777deaf7707b3380b83c531609f783b1fff7bf35d0d191a94991909"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/ICuratorPublishingSettingsService.cs",
+    "bytes": 235,
+    "sha256": "06b5095f3e9ac1db297f271bce024d827a77860aff7d28d1f670b3819c79fa3c"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/IGameCatalogService.cs",
+    "bytes": 1048,
+    "sha256": "bd71de659436c3c228826a52628e1f742c59051bee7aa5c95a40f617f1f192f8"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/IHistoryDraftService.cs",
+    "bytes": 2874,
+    "sha256": "97b5fcb4b5688d15129f7b7ef4dedac42e4676b604637ba04c6b2caae3f2a7c0"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/IPlaySessionService.cs",
+    "bytes": 2048,
+    "sha256": "fb7be560c758ea1940e1166f411678ce94a524dd4c51e0873e185b5e771d1c39"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/IReviewTaskRepository.cs",
+    "bytes": 526,
+    "sha256": "fd7f27305d43681ea0723215a82513cb1499938d55265f67136da96f2a95614b"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/ISteamApiClient.cs",
+    "bytes": 2604,
+    "sha256": "b393ec4239378e7ed63f277f4af0ac0cbce2c9e1abcfac9279a6ef02cded653e"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/ISteamPublishingAutomation.cs",
+    "bytes": 1983,
+    "sha256": "aacdd513d230b0abac1d40937dcf3073f51324ffd5d293f4e3ad15fa3806f061"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/ISteamWebViewService.cs",
+    "bytes": 2956,
+    "sha256": "7dd28f7986da1be8adec4ee11b1cc78d7cb0e11c06788fc97b47d1babcab3203"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Abstractions/ITranslationService.cs",
+    "bytes": 205,
+    "sha256": "fb6a99fe496d17e063bda91062478acb687dfc4cb10ec62414161e364edb5f2f"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Services/CuratorCopyImportService.cs",
+    "bytes": 3326,
+    "sha256": "f43897ae9c17b512d4aba6318480cf7ce94e6b9310f70416a5b108b353b62072"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Services/CuratorCopyWorkflow.cs",
+    "bytes": 5113,
+    "sha256": "62586d78e52ea57909c24e2469ec24d0477b70c19085d87104c8e1fad30986c3"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Services/HistoryDraftService.cs",
+    "bytes": 11101,
+    "sha256": "d2f319bcabd75c4f046e5709dd15ea02fc0db1dbd5f1ccc491d85714cea91a0a"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Services/ReviewContentComposer.cs",
+    "bytes": 5141,
+    "sha256": "4bf5988215269522e2b174364fe2db43aaffedb0e8c77a8e0d885380187b0293"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Services/ReviewPublicationWorkflow.cs",
+    "bytes": 12603,
+    "sha256": "6fe0d420e384faa58a777ea6dd562b5bc53695a287caeb1b765cb5960d33e507"
+  },
+  {
+    "path": "SteamCuratorHub.App/Application/Services/SteamPublishingAutomationScripts.cs",
+    "bytes": 16884,
+    "sha256": "b176a336e22cb35947deb362823b4ed87b81a0c68b490975fe6b9e7a1e2d920d"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/Achievement.cs",
+    "bytes": 1330,
+    "sha256": "0780196fab52a1ab09bf0d7c058790aecc4de8ad0fc186406a09e3c10666a1be"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/AchievementCatalog.cs",
+    "bytes": 1105,
+    "sha256": "46e714587ecfa02dfa2d08ae0d716c9656fccf8fa51a79052a91ceaf627caec6"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/CuratorConnectOffer.cs",
+    "bytes": 303,
+    "sha256": "c6d8486e44b18137b36be4bf3dccc571d5e03b46bc6d1ab8241b8b807a948222"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/CuratorCopy.cs",
+    "bytes": 1302,
+    "sha256": "c18d95f2554f60080e6851f20da1ffbc461800d97c505484e826b8d813d3e71b"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/CuratorPublishingSettings.cs",
+    "bytes": 1583,
+    "sha256": "0af86ddf33b9308243e0689e68c0f0b222b89a0e2ad28386f4388f3a7853b1dc"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/CuratorRecommendationState.cs",
+    "bytes": 140,
+    "sha256": "9d961141ab0c42756751fd89edb4af0cc58a6865126c9a3dbc51c68d780aa111"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/Draft.cs",
+    "bytes": 988,
+    "sha256": "de01dfa8569f39085c7f2e5f497ec61a808125a4a781353db36862dd7554af08"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/Game.cs",
+    "bytes": 2027,
+    "sha256": "b3f4204dd3ff258730d61adc95171ea6aa249518ac296e442852b84937440a71"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/PlayerReview.cs",
+    "bytes": 813,
+    "sha256": "345909167cddb6095cf17310a0d29a36be4c638d84fdf339c74625b741208d9f"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/PlaySessionSnapshot.cs",
+    "bytes": 922,
+    "sha256": "575a140e59ab841a01ed33d01083540a3619eb41670eb526e0cb99ae34237511"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/Publication.cs",
+    "bytes": 833,
+    "sha256": "01a405991174f7eb6d14bcc5ece394d87d91e7fc20068f80fc00cb6c0dde0bd0"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/ReviewTask.cs",
+    "bytes": 3692,
+    "sha256": "8bd2b3c58c0f6fd5c1f1baf1b0358ba965a92ee8c11a08677d6faf0ed2f69d4a"
+  },
+  {
+    "path": "SteamCuratorHub.App/Domain/Models/Steam/SteamModels.cs",
+    "bytes": 3808,
+    "sha256": "e5e3d718ff1b099e91699d70a249bd77c9602d425ebeab3269f305290d88d321"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/AppSettingsService.cs",
+    "bytes": 2671,
+    "sha256": "cf96735ec87e005bbe1a5750f2d2f6c07db4fdc4f6ee8b9edfb9f2366e0723c9"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/EmptyGameCatalogService.cs",
+    "bytes": 665,
+    "sha256": "40f8f41f6d333e9a58aee4418aee141a070b3023b20bddc21dc845091ec82c5f"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/FreeGeminiService.cs",
+    "bytes": 22850,
+    "sha256": "ad9219ce19a8e79ed909f058a76fce42c34a1b4a81371cd46b40a43e4a874274"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/InMemoryGameCatalogService.cs",
+    "bytes": 2618,
+    "sha256": "846c31923732acf690ee89a7bb3bc4cff12343d70c57557b90ce8b0f636940ab"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/InMemoryReviewTaskRepository.cs",
+    "bytes": 1620,
+    "sha256": "c934326c28dac5767f8dbb51ec8fa37bb59b638bc3390dbda20d7ef72ad283fb"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/JsonCuratorPublishingSettingsService.cs",
+    "bytes": 5739,
+    "sha256": "50099eeec7b8e78269ab11f74823b4c13b164d74c8bd932e9c07756592bd2377"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/ReviewTaskPlaySessionService.cs",
+    "bytes": 13348,
+    "sha256": "e3426582fc2b3cdbea9466469b75e558507e1a36b99ee8b0beeb1c03b9cd4723"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/SqliteReviewTaskRepository.cs",
+    "bytes": 33785,
+    "sha256": "eb0997d3d6ac32e3a432fa5bef48c515d6c3f4686082112510aa354a8369e83e"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/SteamAchievementRefreshService.cs",
+    "bytes": 9082,
+    "sha256": "952de4cbee0868bbe32b365f6ba35293806f1deff812429110e53bfca38a4480"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/SteamGameCatalogService.cs",
+    "bytes": 31601,
+    "sha256": "339ccb42a276293a4ea41ab9764d790de0c9229c38dd44cb118aabc7aa3e3a4e"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/SteamUriGameLauncher.cs",
+    "bytes": 1490,
+    "sha256": "aff3b60693c5e9b71aa470b3b3741d0e04b0122bfda37232367b5138d1ffdd48"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/SteamWebApiClient.cs",
+    "bytes": 31541,
+    "sha256": "c74661f767602d43bdfbe69a1e24888c407b0184765607d52e495e0b2bf5baa4"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/SteamWebViewService.cs",
+    "bytes": 21186,
+    "sha256": "4a2274ca405a8faa48ab1aea5dad19782aa97f87f9f4c4ce82eec403d8927eb6"
+  },
+  {
+    "path": "SteamCuratorHub.App/Infrastructure/Services/SteamWebViewService.Publishing.cs",
+    "bytes": 14425,
+    "sha256": "b8eb1a7bce5cc0eb92e5d65c5e5ca64a6f77c2ccb20fc84d5a2ae1df93a958b5"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Controls/ModernDatePicker.xaml",
+    "bytes": 14946,
+    "sha256": "637fae36399b0a09cb3fcda523106857746f9b09163b1fd034014924a69928be"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Controls/ModernDatePicker.xaml.cs",
+    "bytes": 6783,
+    "sha256": "f2709f2a4e5cee70f62fa90bfbc79e53bfe96003283faffd298b56af3053c002"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedAchievementStateConverter.cs",
+    "bytes": 729,
+    "sha256": "cb5837a5bc048376f5ac24882b9fbc448b1c0f28b2703fbe3899c44c564dca7b"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedAchievementTextConverter.cs",
+    "bytes": 833,
+    "sha256": "58b0834c753e0ba2bd44556799cf25533df417723fc7933618a8d8548f2e8700"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedCuratorCopyStatusConverter.cs",
+    "bytes": 1052,
+    "sha256": "485a50f7dc6af6ace2cdef22c05c7e891390f9e99e70803d9775a11e3a332d7e"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedGameMetadataConverter.cs",
+    "bytes": 807,
+    "sha256": "89d9cd6b00daebe9eb7809346a9f152083d31f9f4b01ca3692cd60863e827fe7"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedGameNameConverter.cs",
+    "bytes": 663,
+    "sha256": "d30db18968c33349622db22344fa59fb0ebac29ef7ef598bfd5fa3527adcf02d"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedReviewContentConverter.cs",
+    "bytes": 603,
+    "sha256": "dfac5dd2521bfd3fee921d3e30cf7898e8e1171a3356ce898cad2fc5df087695"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedSortOptionConverter.cs",
+    "bytes": 773,
+    "sha256": "ce670bdc62faf7198b73938f00a57e88baef549559b7e4083bdae47b8073f4ad"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedStatusConverter.cs",
+    "bytes": 693,
+    "sha256": "0a559bf0296513c3ff67eabecfa6712d0e12359214fc159156995585275f75cb"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/LocalizedTextConverter.cs",
+    "bytes": 645,
+    "sha256": "e17c461350772e5c5a7f8b3b7b395e9fd6465eab6ba96dadd667816653bedfa3"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/ModernSectionVisibilityConverter.cs",
+    "bytes": 753,
+    "sha256": "692d51f12634316050ceb7bae5dfdebeae597938ce75136fc3f9c7ef92e06b2a"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Converters/SectionVisibilityConverter.cs",
+    "bytes": 838,
+    "sha256": "e6bbbff060778314306602948e72cb84ade23db79c2dfcf9e2e33ad14203b645"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Localization/LocalizationService.cs",
+    "bytes": 8935,
+    "sha256": "24fac2010d53ed2029860a497a99e0bd14ea51d59f0dbc43001dab7564bf94e6"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Mvvm/ObservableObject.cs",
+    "bytes": 728,
+    "sha256": "d1d0173595d0936a8f0622f7885511908b0907e225b4f1a1fff85970bc2a1bc4"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Mvvm/RelayCommand.cs",
+    "bytes": 911,
+    "sha256": "35734cd743c2cde1bb2e5ffe9b0140c23645e2e9d920b498ec170f9fbf3dae25"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/ViewModels/CuratorGroupViewModel.cs",
+    "bytes": 1664,
+    "sha256": "f5d8203290d77a3919fdcc76f9602466fbd9dd0d5b83faad99b3d626bdb50ed5"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/ViewModels/HistoryDraftsViewModel.cs",
+    "bytes": 14894,
+    "sha256": "2a3ce2e6b5f3691a77a8ea8f11ed71e202e40846526f7f6d467a01c89460b442"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/ViewModels/MainWindowViewModel.cs",
+    "bytes": 80291,
+    "sha256": "e639379f2145001df5b6117d76934616aef9ff8d826c737bd06735ba47d92b61"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/ViewModels/ReviewResearchViewModel.cs",
+    "bytes": 36698,
+    "sha256": "459904549ee16c903b98fb7ec2321225f7575318dae6cc230244976f4885f644"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/EditorPanel.xaml",
+    "bytes": 15756,
+    "sha256": "daf66b8bfbfca33e1a08ed0a6998f2f9b6205ab10a8eeec62df40ee5e1b77a3a"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/EditorPanel.xaml.cs",
+    "bytes": 2818,
+    "sha256": "754a291a8179e6d28c9ef588f21c5c0cbef4a1baa7953627215531ac8fb967a1"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/GameStoreDetailsPanel.xaml",
+    "bytes": 22428,
+    "sha256": "9bc6fa362209e8a29b8fb7e8f4fc2cf7820fc0cc0261cfdc04d806dedd2a89e0"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/GameStoreDetailsPanel.xaml.cs",
+    "bytes": 7623,
+    "sha256": "0f575531fbacbe9a16829263bdf64658e51850e609eaa821f4585177d4032e78"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/InventoryPanel.xaml",
+    "bytes": 26393,
+    "sha256": "a6a61f904a140a7df7e6e8fcb21f7afeab077df2c59ce72586a919070441a88e"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/InventoryPanel.xaml.cs",
+    "bytes": 1783,
+    "sha256": "28a845e6f777d149806eb898dedb3b44275193061cf7f1923e5b6db57057fe36"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/PlaythroughPanel.xaml",
+    "bytes": 26596,
+    "sha256": "98797471415a01b12bbef2b2d9d98ca0c5e7cc9d1aa6b4c6f3ec7bfde4243e29"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/PlaythroughPanel.xaml.cs",
+    "bytes": 494,
+    "sha256": "2ca215f47bd03ef67d3c1a2d7ca92d40f22a36c85d30f89c083c874fea2ba448"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/ReviewResearchPanel.xaml",
+    "bytes": 15695,
+    "sha256": "58dd2e078f516a7c76953aff1786b9b5c8c7f08d8568bb3af8395650ff3810be"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/ReviewResearchPanel.xaml.cs",
+    "bytes": 1378,
+    "sha256": "4de1aa78928bd58e82c72542a7a42b5a8f6c1be2129deb5603ffa6aa2045019f"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/SteamSessionPanel.xaml",
+    "bytes": 9912,
+    "sha256": "56cd6b410914c7a1565c75f3b1e7b274590974e5e8c8cb1b0b8b2a9ef3fd2525"
+  },
+  {
+    "path": "SteamCuratorHub.App/Presentation/Views/SteamSessionPanel.xaml.cs",
+    "bytes": 17266,
+    "sha256": "e862073e2f36a3f87cd29af917d8060b771cf587f7316e8c5042a077b696d860"
+  },
+  {
+    "path": "SteamCuratorHub.IntegrationTests/GeminiIntegrationChecks.cs",
+    "bytes": 19736,
+    "sha256": "d0f9b339913c1d13859e619a899746ed43a79fc8875c036c0454d78f1795db07"
+  },
+  {
+    "path": "SteamCuratorHub.IntegrationTests/HistoryDraftIntegrationChecks.cs",
+    "bytes": 14387,
+    "sha256": "9306bf8b3061a0b311e1e0b0a65c46b06fe409cce581ee60f8df3784737d3618"
+  },
+  {
+    "path": "SteamCuratorHub.IntegrationTests/Program.cs",
+    "bytes": 88594,
+    "sha256": "da4fbdedd36e187d1b60c145b7b30aedfb9b05e4bd53e8a6a8bacb2dc9b763c7"
+  },
+  {
+    "path": "SteamCuratorHub.IntegrationTests/PublishingAdvancedIntegrationChecks.cs",
+    "bytes": 14388,
+    "sha256": "3ae72a0a2d16171f87c8aad3fc47987dbbfbc060f56a6c50e845e3ee6e576e36"
+  },
+  {
+    "path": "SteamCuratorHub.IntegrationTests/PublishingIntegrationChecks.cs",
+    "bytes": 8116,
+    "sha256": "9ea3d2ea60a26982bb6016f3ded1d8c741054f720cf0e2b6e5081b21ed4b4158"
+  },
+  {
+    "path": "SteamCuratorHub.IntegrationTests/RuntimeIntegrationChecks.cs",
+    "bytes": 16641,
+    "sha256": "299d91dc8f732695dc0125d0b58b436c590dae340d61d6f8db251e4921eb4947"
+  },
+  {
+    "path": "SteamCuratorHub.IntegrationTests/SteamCuratorHub.IntegrationTests.csproj",
+    "bytes": 360,
+    "sha256": "68c3be6d6443c8dc67d23621d21b97b395ab55975474950f65996b367b714d34"
+  },
+  {
+    "path": ".gitignore",
+    "bytes": 286,
+    "sha256": "9579111f40182bc0e182bc7799be2ad5d12bcc3d90b2410478f15675eb4c5e47"
+  },
+  {
+    "path": "PROJECT_HANDOFF.md",
+    "bytes": 21719,
+    "sha256": "b48abbc303d039dd4fd9f164b736faa3c52f855b12c5853b1a10a726090c2c92"
+  },
+  {
+    "path": "SteamCuratorHub.slnx",
+    "bytes": 189,
+    "sha256": "b9b85bbceabfd7ca7649fbf7e8e21770c20e64184cdb825ab12a1cf3faf472b8"
+  }
+]

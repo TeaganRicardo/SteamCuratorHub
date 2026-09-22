@@ -1,0 +1,420 @@
+<UserControl x:Class="SteamCuratorHub.Presentation.Views.InventoryPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SteamCuratorHub.Presentation.Converters"
+             xmlns:views="clr-namespace:SteamCuratorHub.Presentation.Views"
+             Background="Transparent"
+             SnapsToDevicePixels="True">
+    <UserControl.Resources>
+        <local:LocalizedTextConverter x:Key="Loc"/>
+        <local:LocalizedGameNameConverter x:Key="GameName"/>
+        <local:LocalizedSortOptionConverter x:Key="SortOption"/>
+
+        <Style x:Key="LibraryGameCardButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+        </Style>
+
+        <Style x:Key="SearchScopeButton" TargetType="RadioButton">
+            <Setter Property="MinWidth" Value="106"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.SurfaceHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.PrimarySoft}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.4"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LibraryGridSplitter" TargetType="GridSplitter">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="ResizeDirection" Value="Columns"/>
+            <Setter Property="ResizeBehavior" Value="PreviousAndNext"/>
+            <Setter Property="ShowsPreview" Value="True"/>
+            <Setter Property="Cursor" Value="SizeWE"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Grid Background="Transparent">
+                            <Border x:Name="Grip"
+                                    Width="2"
+                                    HorizontalAlignment="Center"
+                                    Background="{DynamicResource Brush.Border}"
+                                    CornerRadius="1"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Grip" Property="Width" Value="3"/>
+                                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Primary}"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Grip" Property="Width" Value="3"/>
+                                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Primary}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Grip" Property="Width" Value="3"/>
+                                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Primary}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" MinWidth="360"/>
+            <ColumnDefinition Width="10"/>
+            <ColumnDefinition Width="2*" MinWidth="360" MaxWidth="650"/>
+        </Grid.ColumnDefinitions>
+
+        <ScrollViewer Grid.Column="0"
+                      Margin="0,0,16,0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <Grid Margin="0,2,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{DynamicResource EyebrowText}"
+                                   Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Inventory}"/>
+                        <TextBlock Margin="0,5,0,0"
+                                   Style="{DynamicResource SectionTitle}"
+                                   FontSize="25"
+                                   Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=ChooseGame}"/>
+                    </StackPanel>
+                    <Border Grid.Column="1"
+                            MinWidth="68"
+                            Padding="12,7"
+                            VerticalAlignment="Bottom"
+                            Background="{DynamicResource Brush.PrimarySoft}"
+                            CornerRadius="16">
+                        <TextBlock HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Primary}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   AutomationProperties.Name="{Binding GameSearchStatusLabel}"
+                                   Text="{Binding GameSearchStatusLabel}"/>
+                    </Border>
+                </Grid>
+
+                <Border Margin="0,0,0,18"
+                        Padding="12"
+                        Style="{DynamicResource CardBorder}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Padding="1"
+                                    Background="{DynamicResource Brush.AppBackground}"
+                                    BorderBrush="{DynamicResource Brush.Border}"
+                                    BorderThickness="1"
+                                    CornerRadius="9">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton GroupName="GameSearchScope"
+                                                 IsChecked="{Binding IsLibrarySearch, Mode=OneWay}"
+                                                 Command="{Binding LibrarySearchCommand}"
+                                                 Style="{StaticResource SearchScopeButton}"
+                                                 Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=LibraryScope}"/>
+                                    <RadioButton GroupName="GameSearchScope"
+                                                 IsChecked="{Binding IsStoreSearch, Mode=OneWay}"
+                                                 Command="{Binding StoreSearchCommand}"
+                                                 Style="{StaticResource SearchScopeButton}"
+                                                 Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=StoreScope}"/>
+                                </StackPanel>
+                            </Border>
+
+                        </Grid>
+
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid>
+                                <TextBox x:Name="GameSearchInput"
+                                         Style="{DynamicResource InputTextBox}"
+                                         Padding="13,9"
+                                         AutomationProperties.Name="{Binding GameSearchPlaceholder}"
+                                         Text="{Binding GameSearchQuery, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Margin="14,0,12,0"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False"
+                                           Foreground="{DynamicResource Brush.TextMuted}"
+                                           FontSize="12"
+                                           Text="{Binding GameSearchPlaceholder}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=GameSearchInput}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Text, ElementName=GameSearchInput}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <ComboBox Grid.Column="1"
+                                      Width="172"
+                                      Margin="12,0,0,0"
+                                      ItemsSource="{Binding GameSortOptions}"
+                                      SelectedValue="{Binding GameSort, Mode=TwoWay}"
+                                      SelectedValuePath="Key"
+                                      AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Sort}">
+                                <ComboBox.Style>
+                                    <Style TargetType="ComboBox" BasedOn="{StaticResource InputComboBox}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLibrarySearch}" Value="False">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ComboBox.Style>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock>
+                                            <TextBlock.Text>
+                                                <MultiBinding Converter="{StaticResource SortOption}">
+                                                    <Binding/>
+                                                    <Binding Path="DataContext.Language" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                    </StackPanel>
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding FilteredGames}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel IsItemsHost="True"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="222"
+                                    Height="226"
+                                    Margin="0,0,14,14"
+                                    Padding="0"
+                                    Style="{DynamicResource CardBorder}"
+                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    ClipToBounds="True">
+                                <Border.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Tag="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                  Click="SetActive_Click"
+                                                  Header="{Binding PlacementTarget.Tag.Language, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource Loc}, ConverterParameter=CreateTask}"/>
+                                    </ContextMenu>
+                                </Border.ContextMenu>
+
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="46"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Button Tag="{Binding}"
+                                            Click="GameCard_Click"
+                                            Style="{StaticResource LibraryGameCardButton}">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="112"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Border Background="{DynamicResource Brush.AppBackground}"
+                                                    CornerRadius="9,9,0,0"
+                                                    ClipToBounds="True">
+                                                <Image Source="{Binding HeaderImageUrl}"
+                                                       Stretch="UniformToFill"
+                                                       SnapsToDevicePixels="True"/>
+                                            </Border>
+
+                                            <Grid Grid.Row="1" Margin="14,12,14,9">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Foreground="{DynamicResource Brush.TextPrimary}"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           MaxHeight="38">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding Converter="{StaticResource GameName}">
+                                                            <Binding/>
+                                                            <Binding Path="DataContext.Language" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <TextBlock Grid.Row="1"
+                                                           Margin="0,5,0,0"
+                                                           Style="{DynamicResource MutedText}"
+                                                           FontSize="10"
+                                                           Text="{Binding AppId, StringFormat=AppID {0}}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Button>
+
+                                    <Border Grid.Row="1"
+                                            Margin="12,0"
+                                            BorderBrush="{DynamicResource Brush.Border}"
+                                            BorderThickness="0,1,0,0">
+                                        <Button Tag="{Binding}"
+                                                Click="SetActive_Click"
+                                                Margin="0,7"
+                                                Style="{DynamicResource GhostButton}"
+                                                HorizontalAlignment="Stretch"
+                                                Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=CreateTask}"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border Margin="0,8,14,18"
+                        Padding="24"
+                        Background="{DynamicResource Brush.SurfaceElevated}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding FilteredGames.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel HorizontalAlignment="Center">
+                        <ProgressBar Width="72"
+                                     Height="3"
+                                     Margin="0,0,0,12"
+                                     HorizontalAlignment="Center"
+                                     IsIndeterminate="True"
+                                     AutomationProperties.Name="{Binding GameListEmptyLabel}">
+                            <ProgressBar.Style>
+                                <Style TargetType="ProgressBar" BasedOn="{StaticResource {x:Type ProgressBar}}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsStoreSearching}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ProgressBar.Style>
+                        </ProgressBar>
+                        <TextBlock HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.TextMuted}"
+                                   FontSize="12"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   AutomationProperties.Name="{Binding GameListEmptyLabel}"
+                                   Text="{Binding GameListEmptyLabel}"/>
+                        <Button Margin="0,12,0,0"
+                                HorizontalAlignment="Center"
+                                Command="{Binding RetryLibraryCommand}"
+                                Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=TryAgain}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsGameListError}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <Button Margin="0,8,14,22"
+                        Padding="20,10"
+                        HorizontalAlignment="Center"
+                        Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=LoadMore}"
+                        Command="{Binding LoadMoreGamesCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsLibrarySearch}" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </ScrollViewer>
+
+        <GridSplitter Grid.Column="1"
+                      Style="{StaticResource LibraryGridSplitter}"
+                      AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=StoreDetails}"/>
+
+        <views:GameStoreDetailsPanel Grid.Column="2"
+                                     ShowCreateTask="True"
+                                     CreateTaskRequested="StoreDetails_CreateTaskRequested"/>
+    </Grid>
+</UserControl>

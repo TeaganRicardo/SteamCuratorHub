@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SteamCuratorHub.App/SteamCuratorHub.App.csproj" />
+  <Project Path="SteamCuratorHub.IntegrationTests/SteamCuratorHub.IntegrationTests.csproj" />
+</Solution>

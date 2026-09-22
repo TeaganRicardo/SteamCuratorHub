@@ -1,0 +1,280 @@
+<UserControl x:Class="SteamCuratorHub.Presentation.Controls.ModernDatePicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="PickerRoot"
+             MinHeight="42"
+             Focusable="False"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True"
+             PreviewKeyDown="PickerRoot_PreviewKeyDown">
+    <UserControl.Resources>
+        <Style x:Key="DateDisplayButton" TargetType="Button">
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Padding" Value="12,0,10,0"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceElevated}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                MinHeight="{TemplateBinding MinHeight}"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.SurfaceHover}"/>
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.Primary}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.78"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.42"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CalendarNavigationButton"
+               TargetType="Button"
+               BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+
+        <Style x:Key="CalendarDayButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="38"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.Primary}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.72"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}"/>
+                </Trigger>
+                <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}"/>
+                    <Setter Property="Opacity" Value="0.48"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsToday}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Primary}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Primary}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Foreground" Value="#08141C"/>
+                    <Setter Property="Background" Value="{DynamicResource Brush.Primary}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Primary}"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Button x:Name="DisplayButton"
+                Style="{StaticResource DateDisplayButton}"
+                Click="DisplayButton_Click"
+                AutomationProperties.Name="Select date">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="24"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="DisplayDateTextBlock"
+                           Margin="0,0,8,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.TextPrimary}"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"/>
+
+                <Grid Grid.Column="1"
+                      Width="18"
+                      Height="18"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Center">
+                    <Border Margin="1,3,1,1"
+                            BorderBrush="{DynamicResource Brush.TextMuted}"
+                            BorderThickness="1.3"
+                            CornerRadius="2"/>
+                    <Path Data="M 1,7 L 17,7 M 5,1 L 5,5 M 13,1 L 13,5"
+                          Stroke="{DynamicResource Brush.TextMuted}"
+                          StrokeThickness="1.3"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"/>
+                </Grid>
+            </Grid>
+        </Button>
+
+        <Popup x:Name="CalendarPopup"
+               PlacementTarget="{Binding ElementName=DisplayButton}"
+               Placement="Bottom"
+               VerticalOffset="6"
+               AllowsTransparency="True"
+               StaysOpen="False"
+               PopupAnimation="Fade"
+               Opened="CalendarPopup_Opened"
+               Closed="CalendarPopup_Closed">
+            <Border Width="330"
+                    Padding="12"
+                    Background="{DynamicResource Brush.SurfaceElevated}"
+                    BorderBrush="{DynamicResource Brush.BorderStrong}"
+                    BorderThickness="1"
+                    CornerRadius="10">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="22"
+                                      ShadowDepth="7"
+                                      Opacity="0.48"
+                                      Color="#000000"/>
+                </Border.Effect>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="36"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="36"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Content="‹"
+                                ToolTip="Previous month"
+                                AutomationProperties.Name="Previous month"
+                                Style="{StaticResource CalendarNavigationButton}"
+                                Click="PreviousMonth_Click"/>
+                        <TextBlock x:Name="MonthTitleTextBlock"
+                                   Grid.Column="1"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.TextPrimary}"
+                                   FontFamily="Segoe UI Variable Display, Segoe UI"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"/>
+                        <Button Grid.Column="2"
+                                Content="›"
+                                ToolTip="Next month"
+                                AutomationProperties.Name="Next month"
+                                Style="{StaticResource CalendarNavigationButton}"
+                                Click="NextMonth_Click"/>
+                    </Grid>
+
+                    <ItemsControl Grid.Row="1"
+                                  Margin="0,0,0,4"
+                                  ItemsSource="{Binding WeekdayHeaders, ElementName=PickerRoot}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" Columns="7"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Height="25"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.TextMuted}"
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <ItemsControl Grid.Row="2"
+                                  ItemsSource="{Binding CalendarDays, ElementName=PickerRoot}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="6" Columns="7"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding DayNumber}"
+                                        Tag="{Binding Date}"
+                                        AutomationProperties.Name="{Binding AccessibleDate}"
+                                        Style="{StaticResource CalendarDayButton}"
+                                        Click="DayButton_Click"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid Grid.Row="3" Margin="0,10,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Border Background="{DynamicResource Brush.Border}"/>
+                        <Button x:Name="TodayButton"
+                                Grid.Row="1"
+                                Margin="0,8,0,0"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource GhostButton}"
+                                Padding="10,6"
+                                Click="TodayButton_Click"/>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

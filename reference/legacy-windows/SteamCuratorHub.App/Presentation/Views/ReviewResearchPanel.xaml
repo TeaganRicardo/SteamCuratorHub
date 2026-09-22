@@ -1,0 +1,273 @@
+<UserControl x:Class="SteamCuratorHub.Presentation.Views.ReviewResearchPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SteamCuratorHub.Presentation.Converters"
+             Background="Transparent">
+    <UserControl.Resources>
+        <local:LocalizedTextConverter x:Key="Loc"/>
+
+        <Style x:Key="ResearchActionButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Padding" Value="9,4"/>
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <Style x:Key="ResearchReviewCard" TargetType="Border">
+            <Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="Padding" Value="13"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceElevated}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center"
+                       Style="{DynamicResource EyebrowText}"
+                       Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=PlayerReviews}"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Click="TranslateAll_Click"
+                        IsEnabled="{Binding Research.CanTranslateAll}"
+                        Style="{StaticResource ResearchActionButton}"
+                        Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=TranslateAll}"/>
+                <Button Margin="6,0,0,0"
+                        Click="Summarize_Click"
+                        IsEnabled="{Binding Research.CanSummarizeReviews}"
+                        Style="{DynamicResource SecondaryButton}"
+                        Padding="10,4"
+                        MinHeight="28"
+                        FontSize="11"
+                        Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Summarize}"/>
+            </StackPanel>
+        </Grid>
+
+        <ProgressBar Height="3"
+                     Margin="0,10,0,0"
+                     IsIndeterminate="True"
+                     AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=StoreDetails}">
+            <ProgressBar.Style>
+                <Style TargetType="ProgressBar" BasedOn="{StaticResource {x:Type ProgressBar}}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsGameDetailsLoading}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ProgressBar.Style>
+        </ProgressBar>
+
+        <Border Margin="0,10,0,0"
+                Padding="11,9"
+                Background="{DynamicResource Brush.PrimarySoft}"
+                CornerRadius="8">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Research.IsConfigured}" Value="False">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel>
+                <TextBlock Foreground="{DynamicResource Brush.Primary}"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=AINotConfigured}"/>
+                <TextBlock Margin="0,3,0,0"
+                           Foreground="{DynamicResource Brush.TextSecondary}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=AIConfigureHint}"/>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Margin="0,9,0,0"
+                   Foreground="{DynamicResource Brush.TextMuted}"
+                   FontSize="11"
+                   AutomationProperties.LiveSetting="Polite"
+                   AutomationProperties.Name="{Binding Research.ProgressLabel}"
+                   Text="{Binding Research.ProgressLabel}"/>
+        <TextBlock Margin="0,5,0,0"
+                   Foreground="{DynamicResource Brush.Danger}"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite"
+                   AutomationProperties.Name="{Binding Research.ErrorMessage}"
+                   Text="{Binding Research.ErrorMessage}"/>
+
+        <TextBlock Margin="0,8,0,0"
+                   Foreground="{DynamicResource Brush.TextMuted}"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite"
+                   Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=ReviewsUnavailable}">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsGameDetailsLoading}" Value="False"/>
+                                <Condition Binding="{Binding HasLoadedGameDetails}" Value="True"/>
+                                <Condition Binding="{Binding SelectedGame.ReviewsUnavailable}" Value="True"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <Border Margin="0,10,0,12"
+                Padding="12"
+                Background="{DynamicResource Brush.PrimarySoft}"
+                CornerRadius="8">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Research.HasReviewSummary}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel>
+                <TextBlock Foreground="{DynamicResource Brush.Primary}"
+                           FontSize="10"
+                           FontWeight="SemiBold"
+                           Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=AIGenerated}"/>
+                <TextBlock Margin="0,6,0,0"
+                           Foreground="{DynamicResource Brush.TextPrimary}"
+                           FontSize="12"
+                           LineHeight="19"
+                           TextWrapping="Wrap"
+                           Text="{Binding Research.ReviewSummary}"/>
+            </StackPanel>
+        </Border>
+
+        <ItemsControl ItemsSource="{Binding Research.Reviews}">
+            <ItemsControl.Style>
+                <Style TargetType="ItemsControl">
+                    <Setter Property="Visibility" Value="Visible"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsGameDetailsLoading}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding SelectedGame.ReviewsUnavailable}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ItemsControl.Style>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource ResearchReviewCard}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Width="7" Height="7" Margin="0,0,8,0" CornerRadius="4">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Recommended}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.Success}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                    <TextBlock Foreground="{DynamicResource Brush.TextPrimary}"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding Author}"/>
+                                    <TextBlock Margin="8,0,0,0"
+                                               Foreground="{DynamicResource Brush.TextMuted}"
+                                               FontSize="10"
+                                               Text="{Binding SourceLanguage}"/>
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Tag="{Binding}"
+                                        Click="ReviewAction_Click"
+                                        IsEnabled="{Binding CanAct}"
+                                        Style="{StaticResource ResearchActionButton}"
+                                        Content="{Binding ActionLabel}"/>
+                            </Grid>
+                            <TextBlock Margin="0,9,0,0"
+                                       Foreground="{DynamicResource Brush.TextSecondary}"
+                                       FontSize="12"
+                                       LineHeight="18"
+                                       MaxHeight="{Binding ContentMaxHeight}"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding DisplayContent}"/>
+                            <Grid Margin="0,5,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Foreground="{DynamicResource Brush.Danger}"
+                                           FontSize="10"
+                                           TextWrapping="Wrap"
+                                           Text="{Binding ErrorMessage}"/>
+                                <Button Grid.Column="1"
+                                        Tag="{Binding}"
+                                        Click="ReviewExpand_Click"
+                                        Content="{Binding ExpandLabel}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource ResearchActionButton}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsLongContent}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Margin="0,8,0,0"
+                   HorizontalAlignment="Center"
+                   Foreground="{DynamicResource Brush.TextMuted}"
+                   FontSize="11"
+                   AutomationProperties.LiveSetting="Polite"
+                   Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=NoReviews}">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Research.Reviews.Count}" Value="0"/>
+                                <Condition Binding="{Binding IsGameDetailsLoading}" Value="False"/>
+                                <Condition Binding="{Binding SelectedGame.IsStoreDetailsLoaded}" Value="True"/>
+                                <Condition Binding="{Binding SelectedGame.ReviewsUnavailable}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+    </StackPanel>
+</UserControl>

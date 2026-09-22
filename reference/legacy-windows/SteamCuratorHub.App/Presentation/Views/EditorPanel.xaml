@@ -1,0 +1,214 @@
+<UserControl x:Class="SteamCuratorHub.Presentation.Views.EditorPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SteamCuratorHub.Presentation.Converters"
+             xmlns:views="clr-namespace:SteamCuratorHub.Presentation.Views"
+             Background="Transparent"
+             SnapsToDevicePixels="True">
+    <UserControl.Resources>
+        <local:LocalizedTextConverter x:Key="Loc"/>
+        <Style x:Key="EditorGridSplitter" TargetType="GridSplitter">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="ResizeDirection" Value="Columns"/>
+            <Setter Property="ResizeBehavior" Value="PreviousAndNext"/>
+            <Setter Property="ShowsPreview" Value="True"/>
+            <Setter Property="Cursor" Value="SizeWE"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Grid Background="Transparent">
+                            <Border x:Name="Grip"
+                                    Width="2"
+                                    HorizontalAlignment="Center"
+                                    Background="{DynamicResource Brush.Border}"
+                                    CornerRadius="1"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Grip" Property="Width" Value="3"/>
+                                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Primary}"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Grip" Property="Width" Value="3"/>
+                                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Primary}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Grip" Property="Width" Value="3"/>
+                                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Primary}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="FormatButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="MinWidth" Value="34"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Margin" Value="0,0,3,3"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" MinWidth="400"/>
+            <ColumnDefinition Width="10"/>
+            <ColumnDefinition Width="2*" MinWidth="360" MaxWidth="650"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Writing workspace -->
+        <Border Grid.Column="0"
+                Style="{DynamicResource CardBorder}"
+                IsEnabled="{Binding HasSelectedTask}"
+                Padding="20">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="220"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Editor}"
+                                   Style="{DynamicResource EyebrowText}"/>
+                        <TextBlock Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=LongReview}"
+                                   Style="{DynamicResource SectionTitle}"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=CuratorGroup}"
+                                   Style="{DynamicResource MutedText}"
+                                   Margin="0,0,0,7"/>
+                        <ComboBox ItemsSource="{Binding GroupOptions}"
+                                  SelectedItem="{Binding SelectedTask.CuratorGroup, Mode=TwoWay}"
+                                  Style="{DynamicResource InputComboBox}"
+                                  AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=CuratorGroup}"
+                                  HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+                </Grid>
+
+                <Border Grid.Row="1"
+                        Height="1"
+                        Margin="0,18,0,14"
+                        Background="{DynamicResource Brush.Border}"/>
+
+                <!-- Compact Steam BBCode toolbar -->
+                <Border Grid.Row="2"
+                        Background="{DynamicResource Brush.SurfaceElevated}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="7"
+                        Margin="0,0,0,10">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Left"
+                                   Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=SteamFormatting}"
+                                   Style="{DynamicResource EyebrowText}"
+                                   VerticalAlignment="Center"
+                                   Margin="5,0,16,0"/>
+                        <WrapPanel>
+                            <Button Content="H1" Click="Heading1_Click" Style="{StaticResource FormatButton}" AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Heading1}"/>
+                            <Button Content="H2" Click="Heading2_Click" Style="{StaticResource FormatButton}" AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Heading2}"/>
+                            <Button Content="H3" Click="Heading3_Click" Style="{StaticResource FormatButton}" AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Heading3}"/>
+                            <Button Content="B" FontWeight="Bold" Click="Bold_Click" Style="{StaticResource FormatButton}" AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Bold}"/>
+                            <Button Content="I" FontStyle="Italic" Click="Italic_Click" Style="{StaticResource FormatButton}" AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Italic}"/>
+                            <Button Content="U" Click="Underline_Click" Style="{StaticResource FormatButton}" AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Underline}"/>
+                            <Button Content="S" Click="Strike_Click" Style="{StaticResource FormatButton}" AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Strikethrough}"/>
+                            <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Spoiler}" Click="Spoiler_Click" Style="{StaticResource FormatButton}"/>
+                            <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Quote}" Click="Quote_Click" Style="{StaticResource FormatButton}"/>
+                            <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Bullets}" Click="Bullets_Click" Style="{StaticResource FormatButton}"/>
+                            <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=OrderedList}" Click="OrderedList_Click" Style="{StaticResource FormatButton}"/>
+                            <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Code}" Click="Code_Click" Style="{StaticResource FormatButton}"/>
+                            <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Link}" Click="Link_Click" Style="{StaticResource FormatButton}"/>
+                            <Button Content="HR" Click="HorizontalRule_Click" Style="{StaticResource FormatButton}" AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=HorizontalRule}"/>
+                            <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=Table}" Click="Table_Click" Style="{StaticResource FormatButton}"/>
+                            <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=NoParse}" Click="NoParse_Click" Style="{StaticResource FormatButton}"/>
+                        </WrapPanel>
+                    </DockPanel>
+                </Border>
+
+                <TextBox x:Name="ReviewEditor"
+                         Grid.Row="3"
+                         Text="{Binding LongReview, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{DynamicResource InputTextBox}"
+                         AcceptsReturn="True"
+                         AcceptsTab="True"
+                         TextWrapping="Wrap"
+                         VerticalContentAlignment="Top"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Disabled"
+                         SpellCheck.IsEnabled="True"
+                         MinHeight="240"
+                         Padding="15"
+                         AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=LongReview}"
+                         FontSize="14"/>
+
+                <Grid Grid.Row="4" Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=SaveDraft}"
+                                Command="{Binding SaveDraftCommand}"
+                                Style="{DynamicResource SecondaryButton}"
+                                Padding="15,9"
+                                Margin="0,0,8,0"/>
+                        <Button Content="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=PublishLongReview}"
+                                Click="ReviewInSteam_Click"
+                                IsEnabled="{Binding CanOpenLongReviewInSteam}"
+                                Style="{DynamicResource PrimaryButton}"
+                                Padding="17,9"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Border Grid.Column="0"
+                Panel.ZIndex="2"
+                Margin="1"
+                Padding="28"
+                Background="{DynamicResource Brush.Surface}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="1"
+                CornerRadius="9">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasSelectedTask}" Value="False">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource Brush.TextMuted}"
+                       FontSize="13"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite"
+                       Text="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=ChooseTaskToEdit}"/>
+        </Border>
+
+        <GridSplitter Grid.Column="1"
+                      Style="{StaticResource EditorGridSplitter}"
+                      AutomationProperties.Name="{Binding DataContext.Language, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Loc}, ConverterParameter=StoreDetails}"/>
+
+        <views:GameStoreDetailsPanel Grid.Column="2"/>
+    </Grid>
+</UserControl>
