@@ -2,13 +2,15 @@
 
 个人 Steam 鉴赏家工作台：游戏查询、挂时长、成就管理、评论研究、个人长评及鉴赏家短评。
 
-目标为单 Steam 账号、多个鉴赏组，支持 macOS 与 Windows，首版优先 macOS。当前阶段：需求对齐；尚未选择新版本技术栈。
+目标为单 Steam 账号、多个鉴赏组，支持 macOS 与 Windows，首版优先 macOS。当前阶段：技术可行性验证与独立工具开发；尚未选择新版本桌面框架，也尚未发布可安装应用。
 
 ## 项目入口
 
 - [项目状态](PROJECT_STATUS.md)：已完成、验证结果、下一步。
 - [需求草案](docs/REQUIREMENTS.md)：明确需求、原型启发和待确认决策。
 - [历史原型分析](docs/LEGACY_ASSESSMENT.md)：实际代码能力、接线缺口与可复用部分。
+- [Steam 能力调研](docs/research/steam-feasibility.md)、[发布与会话调研](docs/research/publishing-feasibility.md)、[AI 调研](docs/research/ai-feasibility.md)：一手来源、候选路径及待实测门槛。
+- [并行时长验证工具 PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9)：离线 fixture 与用户手动启动的时长子实验，尚不代表真实 Steam 验收通过。
 - [Windows 参考原型](reference/legacy-windows/README.md)：2026-09-22 接收的源码快照。
 - [协作规则](AGENTS.md)：跨 ChatGPT Chat Mode / Project 的接手入口。
 
