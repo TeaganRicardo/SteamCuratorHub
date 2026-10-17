@@ -1,0 +1,14 @@
+{
+  "name": "steam-curator-hub-validation",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tools/steam-validation/test/*.test.mjs",
+    "probe:fixture": "node tools/steam-validation/cli.mjs --fixture"
+  },
+  "dependencies": { "steam-user": "5.3.0" },
+  "overrides": { "adm-zip": "0.6.1", "protobufjs": "7.6.6" }
+}

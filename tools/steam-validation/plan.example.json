@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "expectedSteamId": "REPLACE_WITH_YOUR_STEAMID64",
+  "readbackDelaySeconds": 30,
+  "targets": [
+    { "appId": 0, "stopAfterSeconds": 900, "uninstalled": true, "windowsOnly": true },
+    { "appId": 0, "stopAfterSeconds": 1800, "uninstalled": false, "windowsOnly": false }
+  ]
+}
