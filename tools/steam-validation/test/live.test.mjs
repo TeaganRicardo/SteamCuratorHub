@@ -96,3 +96,29 @@ test('installed patched dependency can construct a client and roundtrip used pro
   const encoded = type.encode(type.create({ ticket_version_no: 1 })).finish();
   assert.equal(type.decode(encoded).ticket_version_no, 1);
 });
+
+test('login timeout aborts pending Steam Guard prompt before returning', async () => {
+  let guardSignal;
+  let promptCancelled = false;
+  class GuardUser extends FakeUser {
+    logOn() {
+      this.emit('steamGuard', null, () => {});
+    }
+  }
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms, ...args) => originalSetTimeout(fn, ms === 120000 ? 5 : ms, ...args);
+  try {
+    await assert.rejects(createLiveTransport({ plan: fixturePlan,
+      signal: new AbortController().signal, askAccount: async () => 'fixture',
+      askSecret: async (label, signal) => {
+        if (label === 'Steam password: ') return 'fixture-password';
+        guardSignal = signal;
+        return new Promise((_, reject) => signal.addEventListener('abort', () => {
+          promptCancelled = true; reject(signal.reason);
+        }, { once: true }));
+      }, onFault() {}, SteamUserClass: GuardUser }), { code: 'login_timeout' });
+    assert.equal(guardSignal.aborted, true);
+    assert.equal(promptCancelled, true);
+    assert.deepEqual(FakeUser.last.requests, []);
+  } finally { globalThis.setTimeout = originalSetTimeout; }
+});

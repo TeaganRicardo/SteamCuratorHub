@@ -95,8 +95,12 @@ export async function runProbe({ plan, transport, report, signal, save = () => {
   };
   const snapshot = async phase => {
     signal.throwIfAborted();
+    const readStarted = now();
     const apps = await transport.readOwnedApps(signal);
     signal.throwIfAborted();
+    const readElapsed = now() - readStarted;
+    // The library request timeout is 10s; a larger gap means the deadline was not observable.
+    if (readElapsed < 0 || readElapsed > 15000) throw new ProbeError('clock_gap');
     const values = playtimeSnapshot(apps, plan.targets);
     report.snapshots.push({ phase, elapsedMs: now() - started, values });
     event('playtime_read', { phase });
@@ -110,7 +114,9 @@ export async function runProbe({ plan, transport, report, signal, save = () => {
     report.state = 'running';
     const runStarted = now();
     for (const target of plan.targets) {
-      await wait(Math.max(0, target.stopAfterSeconds * 1000 - (now() - runStarted)), signal);
+      const stopAt = runStarted + target.stopAfterSeconds * 1000;
+      await wait(Math.max(0, stopAt - now()), signal);
+      if (now() - stopAt > 5000) throw new ProbeError('clock_gap');
       request(requested.filter(id => id !== target.appId));
       await wait(plan.readbackDelaySeconds * 1000, signal);
       await snapshot(`after_stop_${target.appId}`);

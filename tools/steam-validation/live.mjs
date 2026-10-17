@@ -2,8 +2,10 @@ import { randomInt } from 'node:crypto';
 import { ProbeError } from './probe.mjs';
 
 // Only loaded for an explicit --live invocation. No stored auth tokens, cookies or local Steam files.
-export async function createLiveTransport({ plan, signal, askSecret, askAccount, onFault,
+export async function createLiveTransport({ plan, signal: parentSignal, askSecret, askAccount, onFault,
   SteamUserClass }) {
+  const lifecycle = new AbortController();
+  const signal = AbortSignal.any([parentSignal, lifecycle.signal]);
   const SteamUser = SteamUserClass ?? (await import('steam-user')).default;
   const user = new SteamUser({ dataDirectory: null, autoRelogin: false, saveAppTickets: false,
     renewRefreshTokens: false });
@@ -34,6 +36,7 @@ export async function createLiveTransport({ plan, signal, askSecret, askAccount,
     if (closing) return;
     closing = true;
     signal.removeEventListener('abort', abortLogin);
+    lifecycle.abort(new ProbeError('session_closed'));
     const ended = new Promise(resolve => {
       if (disconnected) return resolve();
       let timer;

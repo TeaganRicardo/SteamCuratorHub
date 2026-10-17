@@ -114,3 +114,23 @@ test('reject ambiguous, duplicate, uncovered and unsupported plans', () => {
     assert.throws(() => validatePlan(plan), ProbeError);
   }
 });
+
+test('clock gap during a readback interrupts and immediately clears the remaining target', async () => {
+  const s = setup();
+  let time = 0;
+  let reads = 0;
+  s.now = () => time;
+  s.wait = async ms => { time += ms; };
+  const read = s.transport.readOwnedApps;
+  s.transport.readOwnedApps = async signal => {
+    reads++;
+    if (reads === 2) time += 300000;
+    return read(signal);
+  };
+  await runProbe(s);
+  assert.equal(s.report.failure, 'clock_gap');
+  assert.equal(s.report.state, 'interrupted');
+  assert.deepEqual(s.commands, [[1001, 1002], [1002], []]);
+  assert.equal(s.report.snapshots.length, 1);
+  assert.equal(s.report.cleanup, 'logged_off');
+});
