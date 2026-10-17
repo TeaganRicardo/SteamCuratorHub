@@ -9,7 +9,7 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 | 工作 | 分支 / 提交 | 记录与状态 |
 | --- | --- | --- |
 | 当前 main / MVP 开发基线 | `1cd2f9d3cf346937d55ed98a2b0e03f965258999` | 已包含调研 [PR #8](https://github.com/TeaganRicardo/SteamCuratorHub/pull/8) 与时长工具 [PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9)；不是 MVP 最终 head |
-| 完整桌面 MVP | `codex/mvp`，独立工作树 | [Issue #10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：生产模块、界面与本机构建；最终提交、独立审查、CI 与 PR 链接在交付收敛时记录 |
+| 完整桌面 MVP | `codex/mvp`，独立工作树；首次冻结 `d1ea2463626e72e7c04b8bb2584dffea1f4f65bf` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) / [Issue #10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：最终 head、审查及 CI 以 PR 记录为准 |
 | 时长子实验已审 head | `ee363c01eb876005a539ee70221576a8c3696d98` | PR #9 squash 合并为上述 main；历史工具验证只适用于该子实验 |
 
 原工作目录中的 `.workbuddy-ai/` 和 `deliverables/` 在接手时即未跟踪，保留本机且不纳入提交。验证工具及桌面 MVP 在各自独立 managed worktree 开发，不改参考原型或用户原文件。
@@ -30,7 +30,9 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 
 ## 当前验证范围与待完成证据
 
-当前开发树已执行全套 **191/191 离线测试**、31 个桌面模块语法检查、含开发依赖的 `npm audit`（0 漏洞），以及原生 fixture 与 synthetic dylib 检查。Electron 44.9.0 的源码 fixture 与打包后 fixture 均已实际启动通过，覆盖七个页面切换、Node 隔离、原生 helper 合成数据、研究与发布准备。该运行时 SHA-256 校验值为 `12d873a5ae98a6598e730402e9278c5d132e97ea1a4405a7713bec2a3e83921f`。
+首次冻结 head 的全套 **191/191 离线测试**、31 个桌面模块语法检查通过。其后独立审查修复全文链接目标校验、导入原生证据来源、凭据设置原子性及损坏凭据恢复；Windows CI 发现的只读句柄 fsync 失败已改为可写句柄持久保存，并补回归。最终测试数量与同一 head 的七个 CI 任务结果见 PR #11，保留中间 head 的失败记录。
+
+含开发依赖的 `npm audit` 为 0；原生 fixture 与 synthetic dylib 检查通过。Electron 44.9.0 的源码 fixture 与打包后 fixture 均已实际启动通过，覆盖七个页面切换、Node 隔离、原生 helper 合成数据、研究与发布准备。该运行时 SHA-256 校验值为 `12d873a5ae98a6598e730402e9278c5d132e97ea1a4405a7713bec2a3e83921f`。
 
 本机产物为 `dist/Steam Curator Hub-darwin-arm64/Steam Curator Hub.app`，ad-hoc `codesign --verify --deep --strict` 已通过；元数据和 smoke 报告在本机 `.local/package.json`、`.local/mvp-smoke.json` 与 `.local/packaged-smoke.json`。包声明最低 macOS 13.0，但仅本机 macOS 27 执行过当前运行检查，不能据此宣称 13.0 兼容已确认。最终独立审查、同一提交的 CI 状态和重建记录在 head 冻结后补入；以上中间工作树证据不能替代最终 head 收敛。
 

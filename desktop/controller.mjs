@@ -208,6 +208,11 @@ export class AppController {
       }
       case 'publication.verify': { const result = await this.publishing.verifyLong(payload.taskId, payload.attemptId, payload.resultUrl); this.changed(); return result; }
       case 'publication.copy': return this.workspace.assertCurrentAttempt(payload.taskId, payload.attemptId);
+      case 'credentials.reset': {
+        for (const controller of this.researchRequests.values()) controller.abort();
+        this.researchRequests.clear();
+        const result = this.secrets.resetCorrupt(); this.changed(); return result;
+      }
       case 'settings.save': {
         const normalized = normalizeWorkspace({ ...this.workspace.exportBackup(),
           settings: { ...this.workspace.state.settings, ...(payload.settings ?? {}) },
@@ -215,10 +220,25 @@ export class AppController {
         const changes = Object.fromEntries(['aiKey', 'webApiKey', 'searchKey'].filter(key => payload.secrets?.[key] !== undefined).map(key => [key, payload.secrets[key]]));
         if (normalized.settings.aiBaseUrl !== this.workspace.state.settings.aiBaseUrl &&
             changes.aiKey === undefined && this.secrets.status().aiKeyConfigured) throw new Error('new_endpoint_requires_key');
-        // Validate everything first. Credentials are bound to the target origin before config can change.
-        if (this.secrets.patch) this.secrets.patch(changes, payload.persistSecrets !== false, normalized.settings.aiBaseUrl);
-        else for (const [key, value] of Object.entries(changes)) this.secrets.write(key, value, payload.persistSecrets !== false, normalized.settings.aiBaseUrl);
-        this.workspace.commit(state => { state.settings = normalized.settings; state.groups = normalized.groups; });
+        const previous = { settings: structuredClone(this.workspace.state.settings), groups: structuredClone(this.workspace.state.groups) };
+        // Prepare encrypted bytes and runtime replacements before touching either
+        // live store. Production uses SecretStore; the fallback supports injected
+        // legacy test stores without adding another persistence abstraction.
+        const staged = this.secrets.preparePatch ? this.secrets.preparePatch(changes, payload.persistSecrets !== false, normalized.settings.aiBaseUrl)
+          : { commit: () => {
+            if (this.secrets.patch) this.secrets.patch(changes, payload.persistSecrets !== false, normalized.settings.aiBaseUrl);
+            else for (const [key, value] of Object.entries(changes)) this.secrets.write(key, value, payload.persistSecrets !== false, normalized.settings.aiBaseUrl);
+          }, cancel() {} };
+        try {
+          this.workspace.commit(state => { state.settings = normalized.settings; state.groups = normalized.groups; });
+        } catch (error) { staged.cancel(); throw error; }
+        try { staged.commit(); }
+        catch (error) {
+          staged.cancel();
+          try { this.workspace.commit(state => { state.settings = previous.settings; state.groups = previous.groups; }); }
+          catch { throw new Error('configuration_save_incomplete'); }
+          throw error;
+        }
         this.changed(); return this.snapshot();
       }
       default: throw new Error('unknown_command');

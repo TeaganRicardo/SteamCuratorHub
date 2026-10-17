@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { appId, publicHttps, steamId } from './workspace.mjs';
+import { appId, publicHttps, steamId, validateFullReviewUrl } from './workspace.mjs';
 
 const STEAM_HOSTS = ['store.steampowered.com', 'steamcommunity.com', 'login.steampowered.com', 'help.steampowered.com'];
 const BODY_LIMIT = 2 * 1024 * 1024;
@@ -15,7 +15,7 @@ function validateAttempt(attempt) {
   if (!['schinese', 'english'].includes(attempt.language) || typeof attempt.text !== 'string' ||
       !attempt.text.trim() || attempt.text.length > 110000 || attempt.text.includes('\0') ||
       !['recommended', 'not_recommended', 'informational'].includes(attempt.recommendation)) throw fail('invalid_publication_content');
-  if (attempt.fullReviewUrl) publicHttps(attempt.fullReviewUrl);
+  validateFullReviewUrl(attempt.fullReviewUrl ?? '', attempt.ownerSteamId, attempt.appId);
   return attempt;
 }
 function fingerprint(attempt) {
@@ -48,12 +48,16 @@ export function fillSteamForm(expected, inspectOnly = false) {
       !/^[1-9]\d{0,19}$/.test(expected.groupId) || typeof expected.text !== 'string' ||
       !expected.text.trim() || expected.text.length > 110000 || expected.text.includes('\0')) return fail('invalid_expected_content');
   if (expected.kind === 'short' && (Array.from(expected.text).length >= 200 || /https?:\/\//i.test(expected.text))) return fail('invalid_short_content');
-  const fullReviewUrl = expected.fullReviewUrl ?? '';
+  let fullReviewUrl = expected.fullReviewUrl ?? '';
   if (typeof fullReviewUrl !== 'string' || fullReviewUrl.length > 2000) return fail('invalid_full_link');
   if (fullReviewUrl) {
     try {
       const url = new URL(fullReviewUrl);
-      if (url.protocol !== 'https:' || url.username || url.password || url.port) return fail('invalid_full_link');
+      if (url.protocol !== 'https:' || url.hostname !== 'steamcommunity.com' || url.username || url.password || url.port || url.search || url.hash) return fail('invalid_full_link');
+      if (url.pathname.startsWith('/id/')) return fail('full_link_requires_numeric_profile');
+      const path = `/profiles/${expected.ownerSteamId}/recommended/${expected.appId}`;
+      if (url.pathname !== path && url.pathname !== `${path}/`) return fail('full_link_target_mismatch');
+      fullReviewUrl = `https://steamcommunity.com${path}/`;
     } catch { return fail('invalid_full_link'); }
   }
   if (location.protocol !== 'https:' || location.hostname !== 'store.steampowered.com') return fail('wrong_page');

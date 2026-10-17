@@ -32,6 +32,19 @@ export function publicHttps(value, allowedHosts) {
       (allowedHosts && !allowedHosts.includes(url.hostname))) throw new Error('invalid_url');
   return url.href;
 }
+export function validateFullReviewUrl(value, ownerSteamId, id) {
+  steamId(ownerSteamId); appId(id);
+  if (value === '') return '';
+  let url;
+  try { url = new URL(publicHttps(value, ['steamcommunity.com'])); }
+  catch { throw new Error('long_review_result_url_mismatch'); }
+  if (url.pathname.startsWith('/id/')) throw new Error('full_review_url_requires_numeric_profile');
+  const path = `/profiles/${ownerSteamId}/recommended/${id}`;
+  if (url.search || url.hash || url.pathname !== path && url.pathname !== `${path}/`) {
+    throw new Error('long_review_result_url_mismatch');
+  }
+  return `https://steamcommunity.com${path}/`;
+}
 export function shortCount(value) { return Array.from(value).length; }
 export function validateShort(value) {
   text(value, 10000);
@@ -141,6 +154,10 @@ export function normalizeWorkspace(input, { importing = true } = {}) {
         text: text(source[kind]?.text ?? ''), revision: Number.isSafeInteger(source[kind]?.revision) && source[kind].revision >= 0 ? source[kind].revision : 0
       };
       drafts[lang].fullReviewUrl = source.fullReviewUrl ? publicHttps(source.fullReviewUrl) : '';
+      // Legacy URLs remain visible for repair; only publication boundaries
+      // require a canonical review belonging to this exact account and AppID.
+      try { drafts[lang].fullReviewUrl = validateFullReviewUrl(drafts[lang].fullReviewUrl, task.ownerSteamId, task.appId); }
+      catch { drafts[lang].fullReviewUrlNeedsRepair = true; }
       drafts[lang].recommendation = RECOMMENDATIONS.includes(source.recommendation) ? source.recommendation : 'recommended';
       drafts[lang].revision = Number.isSafeInteger(source.revision) && source.revision >= 0 ? source.revision : 0;
     }
@@ -152,10 +169,26 @@ export function normalizeWorkspace(input, { importing = true } = {}) {
       ...sanitizeRecord(JSON.parse(JSON.stringify(attempt))), imported: true,
       state: ['verified', 'user_confirmed'].includes(attempt.state) ? 'imported_unverified' : 'submitted_unknown'
     }));
+    const operations = (Array.isArray(task.operations) ? task.operations : []).slice(-100).map(operation => {
+      const saved = sanitizeRecord(JSON.parse(JSON.stringify(operation)));
+      if (saved.state === 'applying') saved.state = 'outcome_unknown';
+      if (importing) {
+        saved.imported = true; saved.evidenceSource = 'imported_backup';
+        if (saved.state === 'verified') saved.state = 'imported_unverified';
+        if (saved.result) {
+          saved.result.imported = true;
+          if (saved.result.status === 'verified') saved.result.status = 'imported_unverified';
+          if (saved.result.verification) saved.result.verification = { ...saved.result.verification,
+            scope: 'imported-unverified', steamVerified: false, imported: true };
+          if (Array.isArray(saved.result.items)) saved.result.items = saved.result.items.map(item => item.status === 'verified' ? { ...item, status: 'imported_unverified' } : item);
+        }
+      }
+      return saved;
+    });
     return { id: task.id, appId: appId(task.appId), title: text(task.title, 300), ownerSteamId: steamId(task.ownerSteamId),
       groupId: task.groupId, source: text(task.source ?? '', 1000), targetMinutes: optionalMinutes(task.targetMinutes),
       status: ['active', 'completed', 'archived'].includes(task.status) ? task.status : 'active',
-      createdAt: text(task.createdAt ?? now(), 50), updatedAt: text(task.updatedAt ?? now(), 50), drafts, research, publications, operations: (Array.isArray(task.operations) ? task.operations : []).slice(-100).map(operation => ({ ...sanitizeRecord(JSON.parse(JSON.stringify(operation))), state: operation.state === 'applying' ? 'outcome_unknown' : operation.state })) };
+      createdAt: text(task.createdAt ?? now(), 50), updatedAt: text(task.updatedAt ?? now(), 50), drafts, research, publications, operations };
   });
   if (new Set(state.tasks.map(t => t.id)).size !== state.tasks.length ||
       new Set(state.tasks.map(t => `${t.ownerSteamId}:${t.appId}`)).size !== state.tasks.length) throw new Error('duplicate_task');
@@ -239,12 +272,12 @@ export class Workspace {
     });
   }
   saveDraftOptions({ taskId, language: lang, fullReviewUrl, recommendation }) {
-    this.task(taskId); language(lang);
+    const current = this.task(taskId); language(lang);
     if (!RECOMMENDATIONS.includes(recommendation)) throw new Error('invalid_recommendation');
-    const url = fullReviewUrl ? publicHttps(fullReviewUrl) : '';
+    const url = validateFullReviewUrl(fullReviewUrl, current.ownerSteamId, current.appId);
     return this.commit(state => {
       const task = state.tasks.find(t => t.id === taskId);
-      Object.assign(task.drafts[lang], { fullReviewUrl: url, recommendation });
+      Object.assign(task.drafts[lang], { fullReviewUrl: url, fullReviewUrlNeedsRepair: false, recommendation });
       task.drafts[lang].revision++; task.updatedAt = now(); return task;
     });
   }
@@ -268,7 +301,8 @@ export class Workspace {
   content(taskId, lang, kind) {
     const task = this.task(taskId); language(lang);
     const draft = task.drafts[lang];
-    if (kind === 'short') return { text: validateShort(draft.short.text), fullReviewUrl: draft.fullReviewUrl, recommendation: draft.recommendation };
+    if (kind === 'short') return { text: validateShort(draft.short.text),
+      fullReviewUrl: validateFullReviewUrl(draft.fullReviewUrl, task.ownerSteamId, task.appId), recommendation: draft.recommendation };
     if (kind !== 'long' || !draft.long.text.trim()) throw new Error('empty_long_review');
     const footer = this.state.groups.find(g => g.id === task.groupId)?.footers[lang]?.trim() ?? '';
     let body = draft.long.text.trim();

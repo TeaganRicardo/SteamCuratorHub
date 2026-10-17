@@ -144,6 +144,45 @@ test('actual renderer exposes seven usable pages and task context across navigat
   assert.equal(h.document.querySelector('#main img'), null, 'game titles are text, never HTML');
 });
 
+for (const command of ['steam.search', 'steam.library']) test(`late ${command} cannot redraw settings or discard unsaved API inputs`, async t => {
+  const response = deferred(); let calls = 0;
+  const h = await harness({ handlers: { [command]: (payload, context) => {
+    if (command === 'steam.library' && calls++ === 0) return context.defaults(command, payload); // Fixture bootstrap.
+    return response.promise;
+  } } }); t.after(h.dispose);
+  await h.nav('library');
+  if (command === 'steam.search') {
+    await h.input('#main select', 'store', 'change'); await h.input('[aria-label="搜索游戏"]', 'Pending search'); await h.click('搜索');
+  } else await h.click('刷新游戏库');
+  await h.nav('settings'); await h.input('[aria-label="AI API 密钥"]', 'synthetic-unsaved-key');
+  const input = h.document.querySelector('[aria-label="AI API 密钥"]');
+  response.resolve([{ appId: 1003, name: 'Late catalog result', steamMinutes: null }]); await settle(); await settle();
+  assert.equal(h.document.querySelector('#main h1').textContent, '设置');
+  assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]') === input, true, 'late catalog result must not replace the active page DOM');
+  assert.equal(input.value, 'synthetic-unsaved-key');
+});
+
+test('newer store searches win and a mode change invalidates an earlier result', async t => {
+  const old = deferred(), next = deferred(), obsolete = deferred();
+  const responses = [old, next, obsolete]; let sequence = 0;
+  const h = await harness({ handlers: { 'steam.search': () => responses[sequence++].promise } }); t.after(h.dispose);
+  await h.nav('library'); await h.input('#main select', 'store', 'change');
+  await h.input('[aria-label="搜索游戏"]', 'Old'); await h.click('搜索');
+  await h.input('[aria-label="搜索游戏"]', 'New');
+  const enter = new h.window.Event('keydown', { bubbles: true }); enter.key = 'Enter';
+  h.document.querySelector('[aria-label="搜索游戏"]').dispatchEvent(enter); await settle();
+  assert.equal(sequence, 2);
+  next.resolve([{ appId: 1003, name: 'NEW RESULT', steamMinutes: null }]); await settle();
+  old.resolve([{ appId: 1004, name: 'OLD RESULT', steamMinutes: null }]); await settle();
+  assert.match(h.document.querySelector('#main').textContent, /NEW RESULT/);
+  assert.doesNotMatch(h.document.querySelector('#main').textContent, /OLD RESULT/);
+  await h.input('[aria-label="搜索游戏"]', 'Obsolete'); await h.click('搜索');
+  await h.input('#main select', 'library', 'change');
+  obsolete.resolve([{ appId: 1005, name: 'OBSOLETE STORE RESULT', steamMinutes: null }]); await settle();
+  assert.doesNotMatch(h.document.querySelector('#main').textContent, /OBSOLETE STORE RESULT/);
+  assert.equal(h.document.querySelector('#main select').value, 'library');
+});
+
 test('saved run history shows only active owner and retains its synthetic evidence label', async t => {
   const h = await harness({ configure(workspace) {
     const run = { id: 'historical-fixture', steamId: owner, appId: 1001, name: 'Owned <img src=x onerror=alert(1)>',
@@ -199,6 +238,28 @@ test('Unicode short counter includes spaces/newlines/combined codepoints while l
   assert.equal(draft.short.text, text); assert.ok(draft.fullReviewUrl.includes('/1001/'));
   await h.input('[aria-label="鉴赏家短评正文"]', '字'.repeat(200)); await h.click('准备鉴赏家短评');
   assert.equal(h.workspace.task(h.a.id).publications.length, 0); assert.match(h.document.querySelector('#toast').textContent, /少于 200/);
+});
+
+test('editor retains a legacy wrong full link for repair and only freezes a corrected matching link', async t => {
+  const ownReview = `https://steamcommunity.com/profiles/${owner}/recommended/1001/`;
+  const wrongOwner = ownReview.replace(owner, '76561198000000001');
+  const h = await harness({ configure(workspace, { a }) {
+    workspace.saveDraft({ taskId: a.id, language: 'schinese', kind: 'short', text: 'Short body remains unchanged', expectedRevision: 0 });
+    workspace.commit(state => { Object.assign(state.tasks[0].drafts.schinese, { fullReviewUrl: wrongOwner, fullReviewUrlNeedsRepair: true }); });
+  } }); t.after(h.dispose);
+  await h.nav('editor');
+  assert.equal(h.document.querySelector('[aria-label="全文链接"]').value, wrongOwner);
+  await h.click('准备鉴赏家短评'); assert.equal(h.workspace.task(h.a.id).publications.length, 0);
+  for (const link of [wrongOwner, ownReview.replace('/1001/', '/999/'), 'https://example.com/review']) {
+    await h.input('[aria-label="全文链接"]', link); await h.click('保存链接与推荐类型');
+    assert.equal(h.workspace.task(h.a.id).drafts.schinese.fullReviewUrl, wrongOwner);
+    assert.match(h.document.querySelector('#toast').textContent, /对应账号、游戏/);
+  }
+  await h.input('[aria-label="全文链接"]', ownReview); await h.click('保存链接与推荐类型'); await h.click('准备鉴赏家短评');
+  const task = h.workspace.task(h.a.id);
+  assert.equal(task.publications.length, 1); assert.equal(task.publications[0].fullReviewUrl, ownReview);
+  assert.equal(task.drafts.schinese.fullReviewUrlNeedsRepair, false);
+  assert.equal(task.drafts.schinese.short.text, 'Short body remains unchanged');
 });
 
 test('BBCode preview treats HTML as text and only opens explicit HTTPS links', async t => {
@@ -370,4 +431,18 @@ test('connection and Guard dialogs retain no password in their controls and rend
   assert.equal(h.document.querySelector('#modal').open, true); assert.equal(h.document.querySelector('#modal img'), null);
   assert.match(h.document.querySelector('#modal').textContent, /<img onerror=alert\(1\)>/);
   await h.click('取消登录'); assert.equal(h.document.querySelector('#modal').open, false);
+});
+
+test('damaged credentials leave offline work usable and recovery requires an explicit settings action',async t=>{
+  let corrupt=true;
+  const h=await harness({handlers:{init:(_payload,context)=>({...context.snapshot(),credentials:{...context.snapshot().credentials,...(corrupt?{credentialStoreError:'credential_store_unreadable'}:{})}}),
+    'credentials.reset':()=>{corrupt=false;return {reset:true};}}});t.after(h.dispose);
+  await h.nav('editor');await h.input('[aria-label="个人长评正文"]','offline draft still usable');await h.timers.fire(700);
+  await h.nav('settings');assert.match(h.document.querySelector('#main').textContent,/凭据文件需要恢复/);
+  assert.ok(h.findButton('导出工作区备份'));assert.equal(h.calls.some(call=>call.command==='credentials.reset'),false);
+  await h.click('恢复凭据存储…');assert.equal(h.calls.some(call=>call.command==='credentials.reset'),false);
+  await h.click('归档损坏文件并重新配置密钥');
+  assert.equal(h.calls.filter(call=>call.command==='credentials.reset').length,1);
+  assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text,'offline draft still usable');
+  assert.doesNotMatch(h.document.querySelector('#main').textContent,/凭据文件需要恢复/);
 });

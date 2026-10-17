@@ -92,6 +92,28 @@ test('DOM fill uses real field setters/events and keeps independent link empty b
   assert.equal(result.fullLinkFilled, true); assert.equal(result.permissionRequiresUser, true);
 });
 
+test('DOM and attempt boundaries reject a full review of another account/game or host before any field mutation', () => {
+  for (const fullReviewUrl of [URL_RESULT.replace(ACCOUNT, OTHER), URL_RESULT.replace('/1001/', '/999/'),
+    'https://example.com/review', `${URL_RESULT}?tracking=1`, `${URL_RESULT}#fragment`,
+    'https://steamcommunity.com/id/vanity/recommended/1001/']) {
+    const f = domFixture('short'); const result = f.fill({ fullReviewUrl });
+    assert.equal(result.success, false); assert.equal(result.mutationPossible, false);
+    assert.equal(f.body.value, 'Existing body'); assert.equal(f.link.value, 'https://example.com/old');
+    assert.deepEqual(f.body.events, []); assert.deepEqual(f.link.events, []);
+    assert.throws(() => publicationPage({ ...f.expected, fullReviewUrl }), /url_mismatch|requires_numeric_profile/);
+  }
+  const positive = domFixture('short');
+  assert.equal(positive.fill({ fullReviewUrl: URL_RESULT.slice(0, -1) }).success, true);
+  assert.equal(positive.link.value, URL_RESULT);
+});
+
+test('legacy frozen wrong full links cannot open a publishing window even when the current draft has been repaired', async () => {
+  const s = setup({ kind: 'short' });
+  s.workspace.commit(state => { state.tasks[0].publications[0].fullReviewUrl = URL_RESULT.replace(ACCOUNT, OTHER); });
+  await assert.rejects(s.service.open(s.attempt), /long_review_result_url_mismatch|publication_changed/);
+  assert.equal(s.windows.length, 0); await s.service.close();
+});
+
 test('DOM inspect leaves fields unchanged and reports current field constraints', () => {
   const f = domFixture('long'); f.body.maxLength = 8000;
   assert.equal(f.fill({}, true).bodyMaxLength, 8000);

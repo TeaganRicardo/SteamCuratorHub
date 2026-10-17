@@ -23,6 +23,7 @@ const errors = {
   stop_operations_before_import:'请先停止运行、研究和写入操作，再导入备份。', logout_before_binding_another_account:'请先退出当前 Steam 协议账号，再绑定其他 SteamID64。',
   long_review_result_url_mismatch:'请填写对应账号、游戏的 Steam 个人评测链接。', publication_unknown:'该次发布结果未知，先核对结果后再继续。'
 };
+Object.assign(errors,{credential_store_unreadable:'本机凭据文件不可读。任务与草稿仍可使用，请到设置恢复凭据。',credential_store_corrupt:'本机凭据文件损坏。任务与草稿仍可使用，请到设置恢复凭据。',credential_decryption_failed:'系统未能解密凭据，请检查本机系统密钥链。',credential_store_write_failed:'凭据保存失败，原密钥仍保留。请检查本机磁盘与权限后重试。',credential_store_reset_failed:'凭据归档失败，原文件仍保留。请检查本机磁盘与权限。',configuration_save_incomplete:'设置未完整保存，请检查磁盘权限并重新填写凭据配置。',full_review_url_requires_numeric_profile:'请使用 steamcommunity.com/profiles/SteamID64/recommended/AppID/ 格式的个人评测链接，账号与游戏须对应当前任务。'});
 let state;
 let activeTab = 'library';
 let taskId = null;
@@ -31,6 +32,7 @@ let library = [];
 let catalogMode = 'library';
 let librarySort = 'name';
 let libraryQuery = '';
+let catalogRequestSequence = 0;
 let nativeSnapshot = null;
 let nativeTaskId = null;
 let selectedAchievements = new Set();
@@ -193,27 +195,42 @@ async function gameDetails(game) {
       button('创建任务', () => createTaskDialog(game), 'primary')].filter(Boolean));
 }
 function renderLibrary() {
-  main.append(heading('游戏库', '从你的 Steam 库与商店发现游戏，将资料、运行与评测归于同一任务。', button('刷新游戏库', async () => { library = await window.hub.invoke('steam.library'); catalogMode = 'library'; await refresh(false); render(); }, 'primary')));
+  const loadCatalog = async (mode, query, force = false) => {
+    if (catalogMode !== mode) library = [];
+    catalogMode = mode; libraryQuery = query.trim();
+    const request = { sequence: ++catalogRequestSequence, mode, query: libraryQuery,
+      owner: state.workspace.activeSteamId, generation: state.steam.generation };
+    const current = () => request.sequence === catalogRequestSequence && request.mode === catalogMode &&
+      request.query === libraryQuery && request.owner === state.workspace.activeSteamId && request.generation === state.steam.generation;
+    let result = library;
+    try {
+      if (mode === 'store') {
+        if (/^[1-9]\d{0,9}$/.test(request.query)) {
+          const details = await window.hub.invoke('steam.details', { appId: Number(request.query) });
+          result = [{ ...details, name: details.name, steamMinutes: null }];
+        } else result = await window.hub.invoke('steam.search', { query: request.query });
+      } else if (force || !library.length) result = await window.hub.invoke('steam.library');
+      if (!current()) return;
+      if (force) { await refresh(false); if (!current()) return; }
+      library = result;
+      if (activeTab === 'library') render();
+    } catch (error) { if (current()) throw error; }
+  };
+  const refreshLibrary = () => loadCatalog('library', '', true);
+  main.append(heading('游戏库', '从你的 Steam 库与商店发现游戏，将资料、运行与评测归于同一任务。', button('刷新游戏库', refreshLibrary, 'primary')));
   if (state.steam.state !== 'connected') main.append(note('连接 Steam 后可读取拥有的游戏与服务器累计分钟。商店搜索可独立使用；设置中的手动 ID 绑定只确定草稿归属。', true));
   const query = h('input', { type: 'search', value: libraryQuery, placeholder: '按游戏名搜索，或直接输入 AppID', 'aria-label': '搜索游戏' });
   const mode = select([['library','我的游戏库'],['store','Steam 商店']], catalogMode);
   const sort = select([['name','按名称'],['time','按 Steam 时长']], librarySort, event => { librarySort = event.target.value; render(); });
-  const search = async () => {
-    libraryQuery = query.value.trim(); catalogMode = mode.value;
-    if (catalogMode === 'store') {
-      if (/^[1-9]\d{0,9}$/.test(libraryQuery)) {
-        const details = await window.hub.invoke('steam.details', { appId: Number(libraryQuery) }); library = [{ ...details, name: details.name, steamMinutes: null }];
-      } else library = await window.hub.invoke('steam.search', { query: libraryQuery });
-    } else if (!library.length) library = await window.hub.invoke('steam.library');
-    render();
-  };
+  const search = () => loadCatalog(mode.value, query.value);
+  query.addEventListener('input', () => { libraryQuery = query.value; catalogRequestSequence++; });
   query.addEventListener('keydown', event => { if (event.key === 'Enter') search().catch(fail); });
-  mode.addEventListener('change', () => { catalogMode = mode.value; library = []; libraryQuery = ''; render(); });
+  mode.addEventListener('change', () => { catalogRequestSequence++; catalogMode = mode.value; library = []; libraryQuery = ''; if (activeTab === 'library') render(); });
   main.append(h('div', { class: 'filters' }, query, mode, sort, button('搜索', search)));
   let games = library.filter(game => catalogMode === 'store' || !libraryQuery || game.name.toLowerCase().includes(libraryQuery.toLowerCase()) || String(game.appId) === libraryQuery);
   games = [...games].sort(librarySort === 'time' ? (a,b) => (b.steamMinutes ?? -1) - (a.steamMinutes ?? -1) : (a,b) => a.name.localeCompare(b.name, 'zh-CN'));
   const count = games.length;
-  if (!count) { main.append(empty('你的下一篇评测，从这里开始', catalogMode === 'library' ? '连接 Steam 并刷新游戏库，或切换到商店搜索。' : '输入游戏名称或 AppID 搜索商店。', state.steam.state === 'connected' ? button('读取我的游戏', async () => { library = await window.hub.invoke('steam.library'); render(); }) : button('连接 Steam', connectDialog, 'primary'))); return; }
+  if (!count) { main.append(empty('你的下一篇评测，从这里开始', catalogMode === 'library' ? '连接 Steam 并刷新游戏库，或切换到商店搜索。' : '输入游戏名称或 AppID 搜索商店。', state.steam.state === 'connected' ? button('读取我的游戏', refreshLibrary) : button('连接 Steam', connectDialog, 'primary'))); return; }
   main.append(h('p', { class: 'muted tiny' }, `${count} 款游戏${count > 100 ? ' · 当前显示前 100 项，请搜索缩小范围' : ''}`));
   main.append(h('div', { class: 'grid' }, games.slice(0,100).map(game => {
     const existing = state.workspace.tasks.find(item => item.appId === game.appId);
@@ -472,7 +489,7 @@ function renderEditor(){
   const recommendation=select([['recommended','推荐'],['not_recommended','不推荐'],['informational','信息性']],draft().recommendation);
   const shortCard=h('section',{class:'card'},h('h2',{},'鉴赏家短评'),shortArea,h('div',{class:'editor-meta'},shortStatus,count),
     h('p',{class:'inline-note'},'严格少于 200 字。中英文、符号、空格、换行按 Unicode 码点计数；不添加尾巴或链接。'),
-    button('从长评生成短评建议',()=>transformDraft('shorten','short',long),'primary'),h('div',{class:'divider'}),field('个人长评全文链接（独立字段）',link),field('鉴赏家推荐类型',recommendation),
+    button('从长评生成短评建议',()=>transformDraft('shorten','short',long),'primary'),h('div',{class:'divider'}),field('个人长评全文链接（独立字段）',link),draft().fullReviewUrlNeedsRepair?note('此已有链接与当前账号或游戏不匹配，准备发布前请修正；原草稿仍保留。'):null,field('鉴赏家推荐类型',recommendation),
     h('div',{class:'actions section-gap'},button('保存链接与推荐类型',async()=>{await window.hub.invoke('draft.options',{taskId:current.id,language,fullReviewUrl:link.value,recommendation:recommendation.value});await refresh(false);toast('独立链接与推荐类型已保存');})),
     h('p',{class:'inline-note'},'个人长评在 Steam 上使用正面/负面评价；信息性类型仅供鉴赏家短评。发布前由你在页面确认。'));
   main.append(h('div',{class:'columns'},editor,h('div',{class:'stack'},shortCard,h('section',{class:'card'},h('h2',{},'AI 修改建议'),suggestionPanel('long'),suggestionPanel('short')))));
@@ -533,6 +550,9 @@ function updatePublications(){
 }
 function renderSettings(){
   main.append(heading('设置','凭据与工作区分别保存。界面语言固定简体中文，文章语言独立。'));
+  if(state.credentials.credentialStoreError)main.append(h('section',{class:'banner'},h('h2',{},'凭据文件需要恢复'),h('p',{},'任务、草稿和备份仍可使用。原凭据文件将保留在本机归档，恢复后需要重新填写 API 密钥。'),
+    button('恢复凭据存储…',()=>dialog('恢复损坏的凭据文件',h('p',{},'此操作保留原文件的本机副本并建立空凭据存储。已保存任务与草稿保持不变。'),[
+      button('归档损坏文件并重新配置密钥',async()=>{await window.hub.invoke('credentials.reset');$('#modal').close();await refresh();toast('损坏凭据已归档，可重新填写密钥');},'danger')]))));
   const settings=state.workspace.settings;
   const steam=h('input',{value:state.workspace.activeSteamId??'',placeholder:'7656119…','aria-label':'手动绑定SteamID64'});
   main.append(h('section',{class:'card'},h('h2',{},'账号与数据归属'),h('p',{class:'muted'},'连接后自动按实际 SteamID64 显示该账号的任务。也可先绑定 ID 离线编辑；手动绑定不表示已登录。'),h('div',{class:'filters'},steam,button('绑定此 SteamID64',async()=>{await flushAll();await window.hub.invoke('account.bind',{steamId:steam.value.trim()});await refresh();toast('工作区账号已绑定');}),button(state.steam.state==='connected'?'连接详情':'连接 Steam',connectDialog,'primary'))));

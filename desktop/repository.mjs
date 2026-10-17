@@ -17,12 +17,14 @@ export class JsonRepository {
     if (Buffer.byteLength(content) > 20_000_000) throw new Error('workspace_too_large');
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
     const temp = `${this.path}.${randomUUID()}.tmp`;
+    let staged = false;
     try {
-      writeFileSync(temp, content, { mode: 0o600, flag: 'wx' });
-      const fd = openSync(temp, 'r');
-      try { fsyncSync(fd); } finally { closeSync(fd); }
+      // Windows FlushFileBuffers requires write access. Keep the exclusively
+      // created writable handle through write and flush instead of reopening read-only.
+      const fd = openSync(temp, 'wx', 0o600); staged = true;
+      try { writeFileSync(fd, content); fsyncSync(fd); } finally { closeSync(fd); }
       if (existsSync(this.path)) copyFileSync(this.path, `${this.path}.previous`);
-      renameSync(temp, this.path);
-    } finally { rmSync(temp, { force: true }); }
+      renameSync(temp, this.path); staged = false;
+    } finally { if (staged) rmSync(temp, { force: true }); }
   }
 }

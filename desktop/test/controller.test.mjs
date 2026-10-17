@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Workspace } from '../workspace.mjs';
 import { AppController } from '../controller.mjs';
+import { SecretStore } from '../secrets.mjs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const ACCOUNT = '76561198000000000';
 const OTHER = '76561198000000001';
@@ -158,6 +162,80 @@ test('failed credential update does not pair a newly saved provider endpoint wit
     secrets: { aiKey: 'synthetic-new-key' }, persistSecrets: true
   }), /credential_encryption_unavailable/);
   assert.deepEqual(s.controller.aiSettings(), previous);
+});
+
+function realSecrets(t, s) {
+  const dir = mkdtempSync(join(tmpdir(), 'sch-controller-secret-fixture-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, 'credentials.json');
+  const codec = { isEncryptionAvailable: () => true,
+    encryptString: value => Buffer.from(Buffer.from(value).toString('base64')),
+    decryptString: value => Buffer.from(value.toString(), 'base64').toString() };
+  const store = new SecretStore(path, codec);
+  store.patch({ aiKey: 'synthetic-old-ai' }, true, s.workspace.state.settings.aiBaseUrl);
+  store.patch({ searchKey: 'synthetic-session-search' }, false);
+  s.controller.secrets = store;
+  return { dir, path, store };
+}
+
+test('workspace disk failure cancels prepared credentials without changing live file, runtime or original endpoint', async t => {
+  const s = setup(); const real = realSecrets(t, s);
+  const before = s.controller.aiSettings(), raw = readFileSync(real.path, 'utf8');
+  s.workspace.repository.save = () => { throw new Error('disk_full'); };
+  await assert.rejects(s.controller.invoke('settings.save', {
+    settings: { aiBaseUrl: 'https://alternate.example/v1beta', aiModel: 'new-model' },
+    secrets: { aiKey: 'synthetic-new-ai', searchKey: 'synthetic-new-search' }, persistSecrets: true
+  }), /disk_full/);
+  assert.deepEqual(s.controller.aiSettings(), before);
+  assert.equal(readFileSync(real.path, 'utf8'), raw);
+  assert.equal(real.store.read('searchKey'), 'synthetic-session-search');
+  assert.ok(!readdirSync(real.dir).some(file => file.endsWith('.prepared')));
+});
+
+test('failed credential rename restores prior workspace configuration and leaves old credentials usable', async t => {
+  const s = setup(); const real = realSecrets(t, s);
+  const previous = s.workspace.snapshot(), before = s.controller.aiSettings();
+  const prepare = real.store.preparePatch.bind(real.store);
+  real.store.preparePatch = (...args) => {
+    const staged = prepare(...args);
+    return { commit() { throw new Error('credential_store_write_failed'); }, cancel: staged.cancel };
+  };
+  await assert.rejects(s.controller.invoke('settings.save', { settings: { aiBaseUrl: 'https://alternate.example/v1beta' },
+    secrets: { aiKey: 'synthetic-new-ai' } }), /credential_store_write_failed/);
+  assert.deepEqual(s.workspace.snapshot(), previous); assert.deepEqual(s.controller.aiSettings(), before);
+  assert.ok(!readdirSync(real.dir).some(file => file.endsWith('.prepared')));
+});
+
+test('credential commit plus workspace rollback failure is explicit and never installs the staged key', async t => {
+  const s = setup(); const real = realSecrets(t, s); const raw = readFileSync(real.path, 'utf8');
+  const prepare = real.store.preparePatch.bind(real.store); let saves = 0;
+  s.workspace.repository.save = () => { if (++saves > 1) throw new Error('disk_full'); };
+  real.store.preparePatch = (...args) => {
+    const staged = prepare(...args);
+    return { commit() { throw new Error('credential_store_write_failed'); }, cancel: staged.cancel };
+  };
+  await assert.rejects(s.controller.invoke('settings.save', { settings: { aiBaseUrl: 'https://alternate.example/v1beta' },
+    secrets: { aiKey: 'synthetic-new-ai' } }), /configuration_save_incomplete/);
+  assert.equal(readFileSync(real.path, 'utf8'), raw);
+  assert.equal(real.store.read('aiKey', 'https://generativelanguage.googleapis.com/v1beta'), 'synthetic-old-ai');
+  assert.throws(() => s.controller.aiSettings(), /ai_key_endpoint_mismatch/);
+});
+
+test('a corrupt credential file keeps offline workspace init usable and explicit reset archives it and cancels AI', async t => {
+  const s = setup(); const real = realSecrets(t, s);
+  const pending = new AbortController(); s.controller.researchRequests.set(s.task.id, pending);
+  writeFileSync(real.path, '{synthetic-corrupt');
+  const snapshot = await s.controller.invoke('init');
+  assert.equal(snapshot.workspace.tasks[0].id, s.task.id);
+  assert.equal(snapshot.credentials.credentialStoreError, 'credential_store_unreadable');
+  assert.equal(s.workspace.exportBackup().tasks.length, 1);
+  const result = await s.controller.invoke('credentials.reset');
+  assert.equal(readFileSync(result.archivePath, 'utf8'), '{synthetic-corrupt');
+  assert.equal(pending.signal.aborted, true); assert.equal(s.controller.researchRequests.size, 0);
+  assert.equal(s.controller.snapshot().credentials.credentialStoreError, undefined);
+  await assert.rejects(s.controller.invoke('credentials.reset'), /credential_store_not_corrupt/);
+  await s.controller.invoke('settings.save', { secrets: { aiKey: 'synthetic-recovered-ai' } });
+  assert.equal(real.store.read('aiKey', s.workspace.state.settings.aiBaseUrl), 'synthetic-recovered-ai');
 });
 
 test('renderer cannot assert automatic publication verification or persist secrets in the workspace', async () => {

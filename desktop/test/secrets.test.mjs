@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SecretStore } from '../secrets.mjs';
+import { JsonRepository } from '../repository.mjs';
 
 // The OS keychain is replaced by a deterministic synthetic codec. These tests verify
 // routing, transactional state and fallback policy; they do not prove OS encryption.
@@ -77,7 +78,7 @@ test('encryption failure halfway through a patch preserves all old disk and sess
 test('repository failure does not install new session values or their endpoint binding', t => {
   const s = setup(t); s.store.patch({ aiKey: 'fake-before' }, false, 'https://old.example/v1');
   const raw = readFileSync(s.path, 'utf8');
-  s.store.repository.save = () => { throw new Error('synthetic disk failure'); };
+  t.mock.method(JsonRepository.prototype, 'save', () => { throw new Error('synthetic disk failure'); });
   assert.throws(() => s.store.patch({ aiKey: 'fake-after' }, false, 'https://new.example/v1'), /synthetic disk failure/);
   assert.equal(readFileSync(s.path, 'utf8'), raw);
   assert.equal(s.store.read('aiKey', 'https://old.example/v1'), 'fake-before');
@@ -98,4 +99,44 @@ test('legacy AI ciphertext without origin metadata is restricted to the original
   const s = setup(t); s.store.repository.save({ aiKey: s.codec.encryptString('fake-legacy').toString('base64') });
   assert.equal(s.store.read('aiKey', 'https://generativelanguage.googleapis.com/v1beta'), 'fake-legacy');
   assert.throws(() => s.store.read('aiKey', 'https://new.example/v1'), /ai_key_endpoint_mismatch/);
+});
+
+test('prepared replacement leaves live ciphertext/runtime unchanged until commit and cancel removes staging', t => {
+  const s = setup(t); s.store.patch({ aiKey: 'fake-old-ai' }, true, 'https://old.example/v1');
+  s.store.patch({ searchKey: 'fake-old-session' }, false);
+  const raw = readFileSync(s.path, 'utf8');
+  const staged = s.store.preparePatch({ aiKey: 'fake-new-ai', searchKey: 'fake-new-search' }, true, 'https://new.example/v1');
+  assert.equal(readFileSync(s.path, 'utf8'), raw);
+  assert.equal(s.store.read('aiKey', 'https://old.example/v1'), 'fake-old-ai');
+  assert.equal(s.store.read('searchKey'), 'fake-old-session');
+  assert.ok(readdirSync(join(s.path, '..')).some(file => file.endsWith('.prepared')));
+  staged.cancel(); staged.cancel();
+  assert.ok(!readdirSync(join(s.path, '..')).some(file => file.endsWith('.prepared')));
+  assert.equal(readFileSync(s.path, 'utf8'), raw);
+  const next = s.store.preparePatch({ aiKey: 'fake-new-ai', searchKey: 'fake-new-search' }, true, 'https://new.example/v1');
+  next.commit(); next.cancel();
+  assert.equal(s.store.read('aiKey', 'https://new.example/v1'), 'fake-new-ai');
+  assert.equal(s.store.read('searchKey'), 'fake-new-search');
+  assert.equal(s.store.ephemeral.has('searchKey'), false);
+  assert.throws(() => next.commit(), /credential_patch_already_settled/);
+});
+
+test('corrupt status is nonthrowing, read/patch stay blocked and explicit reset archives bytes before reuse', t => {
+  const s = setup(t); s.store.patch({ aiKey: 'fake-session-ai' }, false, 'https://old.example/v1');
+  writeFileSync(s.path, '{synthetic-corrupt');
+  assert.equal(s.store.status().credentialStoreError, 'credential_store_unreadable');
+  assert.throws(() => s.store.patch({ searchKey: 'fake-new' }), /credential_store_unreadable/);
+  assert.throws(() => s.store.read('searchKey'), /credential_store_unreadable/);
+  const result = s.store.resetCorrupt();
+  assert.equal(result.reset, true); assert.equal(readFileSync(result.archivePath, 'utf8'), '{synthetic-corrupt');
+  assert.equal(existsSync(s.path), false); assert.equal(s.store.ephemeral.size, 0);
+  assert.equal(s.store.status().credentialStoreError, undefined);
+  assert.throws(() => s.store.resetCorrupt(), /credential_store_not_corrupt/);
+  s.store.write('aiKey', 'fake-recovered-ai', true, 'https://provider.example/v1');
+  assert.equal(s.store.read('aiKey', 'https://provider.example/v1'), 'fake-recovered-ai');
+  assert.throws(() => s.store.resetCorrupt(), /credential_store_not_corrupt/);
+  for (const invalid of ['null', '[]', '{"aiKey":123}']) {
+    writeFileSync(s.path, invalid); assert.equal(s.store.status().credentialStoreError, 'credential_store_unreadable');
+    assert.throws(() => s.store.read('aiKey'), /credential_store_unreadable/);
+  }
 });
