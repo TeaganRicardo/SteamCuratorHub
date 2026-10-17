@@ -1,4 +1,4 @@
-name: Validation tools
+name: Validation
 on:
   push:
   pull_request:
@@ -18,6 +18,34 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run check
       - run: npm test
       - run: npm run probe:fixture
       - run: npm audit --omit=dev --audit-level=high
+  mac-desktop:
+    # Standard public-repository macos-15 is arm64; fail explicitly if the
+    # runner label changes rather than silently packaging another architecture.
+    # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require macOS arm64
+        run: node -e "if (process.platform !== 'darwin' || process.arch !== 'arm64') process.exit(1)"
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build:native
+      - name: Native fixture and synthetic ABI checks
+        run: node --test desktop/test/native-stats.test.mjs
+      - name: Electron fixture smoke
+        run: npm run smoke
+      - name: Build and verify ad-hoc macOS package
+        run: npm run package:mac
+      - name: Packaged Electron fixture smoke
+        run: node desktop/smoke.mjs '--binary=dist/Steam Curator Hub-darwin-arm64/Steam Curator Hub.app/Contents/MacOS/Steam Curator Hub'
+      # Builds, profiles and smoke evidence stay on this ephemeral runner.
+      # No Steam sessions, API credentials or uploaded build artifacts are used.
