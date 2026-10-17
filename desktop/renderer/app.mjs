@@ -111,10 +111,11 @@ async function refresh(renderView = true) {
   const sequence = ++refreshSequence;
   const next = await window.hub.invoke('init');
   if (sequence !== refreshSequence) return;
-  if (state?.workspace.activeSteamId !== next.workspace.activeSteamId) { uiEpoch++; nativeSnapshot = null; nativeTaskId = null; suggestions.clear(); library = []; }
+  const ownerChanged = state?.workspace.activeSteamId !== next.workspace.activeSteamId;
+  if (ownerChanged) { uiEpoch++; nativeSnapshot = null; nativeTaskId = null; suggestions.clear(); resetCatalog(); }
   state = next;
   if (!state.workspace.tasks.some(item => item.id === taskId)) taskId = state.workspace.tasks.find(item => item.status === 'active')?.id ?? state.workspace.tasks[0]?.id ?? null;
-  renderTop(); if (renderView) render();
+  renderTop(); if (ownerChanged ? activeTab !== 'settings' : renderView) render();
 }
 async function navigate(tab) { await flushAll(); activeTab = tab; renderTop(); render(); }
 async function chooseTask(id) {
@@ -164,8 +165,8 @@ function connectDialog() {
     [button('连接', async () => {
       const credentials = { accountName: name.value, password: password.value }; password.value = '';
       $('#modal').close(); toast('正在连接 Steam，可能需要 Steam Guard…');
-      await window.hub.invoke('steam.login', credentials); credentials.password = ''; await refresh();
-      library = await window.hub.invoke('steam.library'); if (activeTab === 'library') render();
+      await window.hub.invoke('steam.login', credentials); credentials.password = ''; await refresh(false);
+      await loadCatalog('library', libraryQuery, { force: true, automatic: true });
     }, 'primary')]);
 }
 function guardDialog(prompt) {
@@ -194,29 +195,35 @@ async function gameDetails(game) {
       state.workspace.activeSteamId?button('查看我的个人评测',()=>openLink(`https://steamcommunity.com/profiles/${state.workspace.activeSteamId}/recommended/${game.appId}/`)):null,
       button('创建任务', () => createTaskDialog(game), 'primary')].filter(Boolean));
 }
+function resetCatalog(mode = catalogMode, query = libraryQuery) {
+  catalogRequestSequence++; catalogMode = mode; libraryQuery = query; library = [];
+}
+async function loadCatalog(mode, query, { force = false, automatic = false } = {}) {
+  // Login/bootstrap may fill the current library but must not change an
+  // explicit store selection made while authentication was pending.
+  if (automatic && catalogMode !== mode) return;
+  if (catalogMode !== mode) resetCatalog(mode, query.trim());
+  else libraryQuery = query.trim();
+  const request = { sequence: ++catalogRequestSequence, mode, query: libraryQuery,
+    owner: state.workspace.activeSteamId, generation: state.steam.generation };
+  const current = () => request.sequence === catalogRequestSequence && request.mode === catalogMode &&
+    request.query === libraryQuery && request.owner === state.workspace.activeSteamId && request.generation === state.steam.generation;
+  let result = library;
+  try {
+    if (mode === 'store') {
+      if (/^[1-9]\d{0,9}$/.test(request.query)) {
+        const details = await window.hub.invoke('steam.details', { appId: Number(request.query) });
+        result = [{ ...details, name: details.name, steamMinutes: null }];
+      } else result = await window.hub.invoke('steam.search', { query: request.query });
+    } else if (force || !library.length) result = await window.hub.invoke('steam.library');
+    if (!current()) return;
+    if (force) { await refresh(false); if (!current()) return; }
+    library = result;
+    if (activeTab === 'library') render();
+  } catch (error) { if (current()) throw error; }
+}
 function renderLibrary() {
-  const loadCatalog = async (mode, query, force = false) => {
-    if (catalogMode !== mode) library = [];
-    catalogMode = mode; libraryQuery = query.trim();
-    const request = { sequence: ++catalogRequestSequence, mode, query: libraryQuery,
-      owner: state.workspace.activeSteamId, generation: state.steam.generation };
-    const current = () => request.sequence === catalogRequestSequence && request.mode === catalogMode &&
-      request.query === libraryQuery && request.owner === state.workspace.activeSteamId && request.generation === state.steam.generation;
-    let result = library;
-    try {
-      if (mode === 'store') {
-        if (/^[1-9]\d{0,9}$/.test(request.query)) {
-          const details = await window.hub.invoke('steam.details', { appId: Number(request.query) });
-          result = [{ ...details, name: details.name, steamMinutes: null }];
-        } else result = await window.hub.invoke('steam.search', { query: request.query });
-      } else if (force || !library.length) result = await window.hub.invoke('steam.library');
-      if (!current()) return;
-      if (force) { await refresh(false); if (!current()) return; }
-      library = result;
-      if (activeTab === 'library') render();
-    } catch (error) { if (current()) throw error; }
-  };
-  const refreshLibrary = () => loadCatalog('library', '', true);
+  const refreshLibrary = () => loadCatalog('library', '', { force: true });
   main.append(heading('游戏库', '从你的 Steam 库与商店发现游戏，将资料、运行与评测归于同一任务。', button('刷新游戏库', refreshLibrary, 'primary')));
   if (state.steam.state !== 'connected') main.append(note('连接 Steam 后可读取拥有的游戏与服务器累计分钟。商店搜索可独立使用；设置中的手动 ID 绑定只确定草稿归属。', true));
   const query = h('input', { type: 'search', value: libraryQuery, placeholder: '按游戏名搜索，或直接输入 AppID', 'aria-label': '搜索游戏' });
@@ -225,7 +232,7 @@ function renderLibrary() {
   const search = () => loadCatalog(mode.value, query.value);
   query.addEventListener('input', () => { libraryQuery = query.value; catalogRequestSequence++; });
   query.addEventListener('keydown', event => { if (event.key === 'Enter') search().catch(fail); });
-  mode.addEventListener('change', () => { catalogRequestSequence++; catalogMode = mode.value; library = []; libraryQuery = ''; if (activeTab === 'library') render(); });
+  mode.addEventListener('change', () => { resetCatalog(mode.value, ''); if (activeTab === 'library') render(); });
   main.append(h('div', { class: 'filters' }, query, mode, sort, button('搜索', search)));
   let games = library.filter(game => catalogMode === 'store' || !libraryQuery || game.name.toLowerCase().includes(libraryQuery.toLowerCase()) || String(game.appId) === libraryQuery);
   games = [...games].sort(librarySort === 'time' ? (a,b) => (b.steamMinutes ?? -1) - (a.steamMinutes ?? -1) : (a,b) => a.name.localeCompare(b.name, 'zh-CN'));
@@ -417,7 +424,7 @@ function renderResearch() {
 function buffer(kind) {
   const current=task();const key=`${current.id}:${language}:${kind}`;const saved=current.drafts[language][kind];
   let value=buffers.get(key);
-  if(!value){value={key,taskId:current.id,language,kind,text:saved.text,revision:saved.revision,dirty:false,saving:null,timer:null};buffers.set(key,value);}
+  if(!value){value={key,taskId:current.id,ownerSteamId:current.ownerSteamId,language,kind,text:saved.text,revision:saved.revision,dirty:false,saving:null,timer:null};buffers.set(key,value);}
   else if(!value.dirty&&!value.saving&&value.revision!==saved.revision){value.text=saved.text;value.revision=saved.revision;}
   return value;
 }
@@ -429,7 +436,7 @@ async function flushDraft(value) {
       if(value.conflict)throw new Error('draft_changed');
       const text=value.text;
       try {
-        const saved=await window.hub.invoke('draft.save',{taskId:value.taskId,language:value.language,kind:value.kind,text,expectedRevision:value.revision});
+        const saved=await window.hub.invoke('draft.save',{taskId:value.taskId,ownerSteamId:value.ownerSteamId,language:value.language,kind:value.kind,text,expectedRevision:value.revision});
         value.revision=saved.drafts[value.language][value.kind].revision;
         if(value.text===text)value.dirty=false;
         const index=state.workspace.tasks.findIndex(item=>item.id===saved.id);if(index>=0)state.workspace.tasks[index]=saved;
@@ -614,5 +621,5 @@ try{
   state=await window.hub.invoke('init');language=state.workspace.settings.articleLanguage;hideHidden=state.workspace.settings.hideHiddenAchievements;
   taskId=state.workspace.tasks.find(item=>item.status==='active')?.id??state.workspace.tasks[0]?.id??null;
   activeTab=taskId?'tasks':'library';renderTop();render();
-  if(state.fixture){library=await window.hub.invoke('steam.library');}
+  if(state.fixture)await loadCatalog('library', libraryQuery, { force: true, automatic: true });
 }catch(error){main.replaceChildren(empty('工作区暂时无法打开',errors[error.code??error.message]??error.message));}

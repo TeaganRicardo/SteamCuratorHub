@@ -9,6 +9,22 @@ import { JsonRepository } from '../repository.mjs';
 const account = '76561198000000000';
 const ownReview = `https://steamcommunity.com/profiles/${account}/recommended/1001/`;
 
+test('an explicitly owned existing draft buffer can finish CAS saving after active account changes', () => {
+  const workspace = new Workspace({ load: () => null, save() {} }); workspace.bindAccount(account);
+  const old = workspace.createTask({ appId: 1001, title: 'Original owner task', groupId: '45134494' });
+  const other = '76561198000000001'; workspace.bindAccount(other);
+  const current = workspace.createTask({ appId: 1002, title: 'Current owner task', groupId: '45525570' });
+  assert.throws(() => workspace.saveDraft({ taskId: old.id, language: 'english', kind: 'long', text: 'Implicit old task write', expectedRevision: 0 }), /task_not_found/);
+  assert.throws(() => workspace.saveDraft({ taskId: old.id, ownerSteamId: other, language: 'english', kind: 'long', text: 'Wrong claimed owner', expectedRevision: 0 }), /task_not_found|draft_owner_mismatch/);
+  const saved = workspace.saveDraft({ taskId: old.id, ownerSteamId: account, language: 'english', kind: 'long', text: 'Original buffer preserved', expectedRevision: 0 });
+  assert.equal(saved.ownerSteamId, account); assert.equal(saved.drafts.english.long.text, 'Original buffer preserved');
+  assert.equal(saved.drafts.schinese.long.text, '');
+  assert.throws(() => workspace.saveDraft({ taskId: old.id, ownerSteamId: account, language: 'english', kind: 'long', text: 'Stale revision', expectedRevision: 0 }), /draft_changed/);
+  assert.equal(workspace.snapshot().activeSteamId, other);
+  assert.deepEqual(workspace.snapshot().tasks.map(task => task.id), [current.id]);
+  assert.equal(workspace.task(current.id).drafts.english.long.text, '');
+});
+
 test('full review URL requires the exact numeric owner and AppID, while blank clears and a missing trailing slash canonicalizes', () => {
   assert.equal(validateFullReviewUrl('', account, 1001), '');
   assert.equal(validateFullReviewUrl(ownReview.slice(0, -1), account, 1001), ownReview);

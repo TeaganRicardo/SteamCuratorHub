@@ -84,7 +84,7 @@ async function start() {
       } else if (command === 'external.open') {
         const url = publicHttps(payload.url); await shell.openExternal(url); value = { opened: true };
       } else if (command === 'clipboard.write') {
-        if (typeof payload.text !== 'string' || payload.text.length > 100000) throw new Error('invalid_text');
+        if (typeof payload.text !== 'string' || payload.text.length > 2_000_000) throw new Error('invalid_text');
         clipboard.writeText(payload.text); value = { copied: true };
       } else if (command === 'backup.export') {
         const selection = await dialog.showSaveDialog(window, { title: '导出工作区备份（不含凭据）', defaultPath: `steam-curator-hub-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });

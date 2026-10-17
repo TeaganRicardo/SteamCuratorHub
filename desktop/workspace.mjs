@@ -261,11 +261,16 @@ export class Workspace {
       task.updatedAt = now(); return task;
     });
   }
-  saveDraft({ taskId, language: lang, kind, text: value, expectedRevision }) {
-    this.task(taskId); language(lang); text(value);
+  saveDraft({ taskId, ownerSteamId, language: lang, kind, text: value, expectedRevision }) {
+    // Existing editor buffers keep their original owner across login/binding.
+    // This explicit owner grants only a versioned draft save, never an account
+    // switch or access through the active-account task/read/Steam APIs.
+    const expectedOwner = ownerSteamId === undefined ? this.task(taskId).ownerSteamId : steamId(ownerSteamId);
+    if (!this.state.tasks.some(task => task.id === taskId && task.ownerSteamId === expectedOwner)) throw new Error('task_not_found');
+    language(lang); text(value);
     if (!['long', 'short'].includes(kind)) throw new Error('invalid_draft_kind');
     return this.commit(state => {
-      const task = state.tasks.find(t => t.id === taskId);
+      const task = state.tasks.find(t => t.id === taskId && t.ownerSteamId === expectedOwner);
       const draft = task.drafts[lang][kind];
       if (draft.revision !== expectedRevision) throw new Error('draft_changed');
       draft.text = value; draft.revision++; task.drafts[lang].revision++; task.updatedAt = now(); return task;

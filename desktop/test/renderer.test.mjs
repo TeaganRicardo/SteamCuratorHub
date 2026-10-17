@@ -183,6 +183,49 @@ test('newer store searches win and a mode change invalidates an earlier result',
   assert.equal(h.document.querySelector('#main select').value, 'library');
 });
 
+test('late automatic library after login cannot replace a newer store search', async t => {
+  const owned = deferred(); let reads = 0, loggedIn = false;
+  const h = await harness({ handlers: {
+    init: (_payload, context) => ({ ...context.snapshot(), ...(loggedIn ? { steam: { state: 'connected', steamId: owner, generation: 2 } } : {}) }),
+    'steam.library': (payload, context) => reads++ === 0 ? context.defaults('steam.library', payload) : owned.promise,
+    'steam.login': () => { loggedIn = true; return { state: 'connected', steamId: owner, generation: 2 }; },
+    'steam.search': () => [{ appId: 1003, name: 'NEW STORE RESULT', steamMinutes: null }],
+  } }); t.after(h.dispose);
+  await h.click(h.document.querySelector('#account-button')); await h.click('退出连接并停止运行');
+  await h.nav('library'); await h.click(h.document.querySelector('#account-button'));
+  await h.input('input[autocomplete="username"]', 'synthetic-user'); await h.input('input[type="password"]', 'synthetic-password');
+  await h.click('连接'); await settle(); await settle();
+  assert.equal(reads, 2);
+  await h.input('#main select', 'store', 'change'); await h.input('[aria-label="搜索游戏"]', 'New title'); await h.click('搜索');
+  assert.match(h.document.querySelector('#main').textContent, /NEW STORE RESULT/);
+  owned.resolve([{ appId: 1004, name: 'OLD OWNED RESULT', steamMinutes: 20 }]); await settle(); await settle();
+  assert.equal(h.document.querySelector('#main select').value, 'store');
+  assert.match(h.document.querySelector('#main').textContent, /NEW STORE RESULT/);
+  assert.doesNotMatch(h.document.querySelector('#main').textContent, /OLD OWNED RESULT/);
+});
+
+test('login completion preserves a store choice made while authentication was pending', async t => {
+  const login = deferred(); let loggedIn = false, reads = 0;
+  const h = await harness({ handlers: {
+    init: (_payload, context) => ({ ...context.snapshot(), ...(loggedIn ? { steam: { state: 'connected', steamId: owner, generation: 2 } } : {}) }),
+    'steam.library': (payload, context) => { reads++; return context.defaults('steam.library', payload); },
+    'steam.login': async () => { await login.promise; loggedIn = true; return { state: 'connected', steamId: owner, generation: 2 }; },
+    'steam.search': () => [{ appId: 1003, name: 'STORE CHOICE DURING LOGIN', steamMinutes: null }],
+  } }); t.after(h.dispose);
+  await h.click(h.document.querySelector('#account-button')); await h.click('退出连接并停止运行');
+  await h.nav('library'); await h.click(h.document.querySelector('#account-button')); await h.click('连接');
+  await h.input('#main select', 'store', 'change'); await h.input('[aria-label="搜索游戏"]', 'Store choice'); await h.click('搜索');
+  await h.nav('settings'); await h.input('[aria-label="AI API 密钥"]', 'synthetic-unsaved-key');
+  const input = h.document.querySelector('[aria-label="AI API 密钥"]');
+  login.resolve(); await settle(); await settle();
+  assert.equal(reads, 1, 'automatic login loading does not request a library over the selected store mode');
+  assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]'), input);
+  assert.equal(input.value, 'synthetic-unsaved-key');
+  await h.nav('library');
+  assert.equal(h.document.querySelector('#main select').value, 'store');
+  assert.match(h.document.querySelector('#main').textContent, /STORE CHOICE DURING LOGIN/);
+});
+
 test('saved run history shows only active owner and retains its synthetic evidence label', async t => {
   const h = await harness({ configure(workspace) {
     const run = { id: 'historical-fixture', steamId: owner, appId: 1001, name: 'Owned <img src=x onerror=alert(1)>',
@@ -208,6 +251,50 @@ test('editing autosaves to original task/language and navigation flushes remaini
   assert.equal(h.workspace.task(h.b.id).drafts.english.long.text, 'B English text');
   assert.equal(h.workspace.task(h.b.id).drafts.schinese.long.text, '');
   assert.match(h.document.querySelector('#main').textContent, /Beta/);
+});
+
+test('account switch rerenders task content while dirty buffers finish saving to their captured owner and language', async t => {
+  const other = '76561198000000001'; let nextTask;
+  const h = await harness({ configure(workspace) {
+    workspace.bindAccount(other); nextTask = workspace.createTask({ appId: 2001, title: 'New owner task', groupId: '45525570' });
+    workspace.saveDraft({ taskId: nextTask.id, language: 'english', kind: 'long', text: 'New owner English text', expectedRevision: 0 });
+    workspace.bindAccount(owner);
+  } }); t.after(h.dispose);
+  await h.nav('editor'); await h.lang('english'); await h.input('[aria-label="个人长评正文"]', 'Old owner unsaved English text');
+  h.workspace.bindAccount(other); h.emit({ type: 'workspace.changed' }); await settle(); await settle();
+  await h.timers.fire(700);
+  const old = h.workspace.exportBackup().tasks.find(task => task.id === h.a.id);
+  assert.equal(old.drafts.english.long.text, 'Old owner unsaved English text'); assert.equal(old.drafts.schinese.long.text, '');
+  assert.equal(h.workspace.snapshot().activeSteamId, other);
+  assert.equal(h.workspace.task(nextTask.id).drafts.english.long.text, 'New owner English text');
+  assert.equal(h.document.querySelector('#account-status .account-id').textContent, other);
+  assert.equal(h.document.querySelector('[aria-label="个人长评正文"]').value, 'New owner English text');
+  assert.equal(h.document.querySelector('#task-picker').value, nextTask.id);
+  const save = h.calls.find(call => call.command === 'draft.save');
+  assert.equal(save.payload.ownerSteamId, owner); assert.equal(save.payload.taskId, h.a.id); assert.equal(save.payload.language, 'english');
+  assert.equal(h.calls.some(call => /^(?:account\.bind|steam\.(?:login|logout)|runs\.|stats\.)/.test(call.command)), false);
+});
+
+test('account refresh on settings preserves global unsaved API controls', async t => {
+  const h = await harness(); t.after(h.dispose); await h.nav('settings');
+  await h.input('[aria-label="AI API 密钥"]', 'synthetic-unsaved-key');
+  const input = h.document.querySelector('[aria-label="AI API 密钥"]');
+  h.workspace.bindAccount('76561198000000001'); h.emit({ type: 'workspace.changed' }); await settle(); await settle();
+  assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]') === input, true);
+  assert.equal(input.value, 'synthetic-unsaved-key');
+});
+
+test('explicit refresh after login account change also preserves unsaved global API controls', async t => {
+  const login = deferred();
+  const h = await harness({ handlers: { 'steam.login': () => login.promise } }); t.after(h.dispose);
+  h.emit({ type: 'steam.status', data: { state: 'logged_out' } });
+  await h.nav('settings'); await h.input('[aria-label="AI API 密钥"]', 'synthetic-unsaved-after-login');
+  const input = h.document.querySelector('[aria-label="AI API 密钥"]');
+  await h.click(h.document.querySelector('#account-button')); await h.click('连接', h.document.querySelector('#modal'));
+  h.workspace.bindAccount('76561198000000001');
+  login.resolve({ state: 'connected', steamId: '76561198000000001' }); await settle(); await settle();
+  assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]') === input, true);
+  assert.equal(input.value, 'synthetic-unsaved-after-login');
 });
 
 test('language change retains its captured target across a save and status refresh', async t => {
