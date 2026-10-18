@@ -553,6 +553,20 @@ test('authentication failures remain inline and retryable; restoring/reconnectin
   await h.click('取消登录'); assert.equal(modal.open, true); assert.ok(h.findButton('连接', modal));
 });
 
+test('a post-login library failure preserves successful authentication feedback', async t => {
+  let failed = false;
+  const h = await harness({ handlers: {
+    'steam.login': () => { h.setSteam({ state: 'connected', accountName: 'synthetic-account', steamId: owner, persistence: 'encrypted' }); failed = true; return { state: 'connected' }; },
+    'steam.library': (payload, context) => { if (failed) throw new Error('steam_library_failed'); return context.defaults('steam.library', payload); }
+  } }); t.after(h.dispose);
+  h.setSteam({ state: 'logged_out' }); await h.click(h.document.querySelector('#account-button')); await h.click('连接');
+  await settle(); await settle();
+  const modal = h.document.querySelector('#modal');
+  assert.match(modal.textContent, /已连接/); assert.match(modal.textContent, /会话已加密保存/);
+  assert.doesNotMatch(modal.textContent, /Steam 连接未完成/);
+  assert.ok(h.findButton('退出连接并停止运行', modal));
+});
+
 test('achievement read/preview/apply controls remain usable while the same AppID is running', async t => {
   const h = await harness(); t.after(h.dispose);
   h.setRuns([{ id: 'running', appId: h.a.appId, steamId: owner, state: 'running' }]);

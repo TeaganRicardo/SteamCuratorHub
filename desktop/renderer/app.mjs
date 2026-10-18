@@ -175,7 +175,7 @@ async function authenticate(command, payload = {}) {
     if (attempt !== authAttempt) return;
     await refresh(false);
     if (authDialogVisible && $('#modal').open) renderAuthDialog();
-    await loadCatalog('library', libraryQuery, { force: true, automatic: true });
+    await loadCatalog('library', libraryQuery, { force: true, automatic: true }).catch(fail);
   } catch (error) {
     if (attempt !== authAttempt) return;
     await refresh(false); authError = errors[error.code ?? error.message] ?? 'Steam 连接未完成，请重试。';
@@ -650,6 +650,7 @@ window.hub.onEvent(event=>{
   if(event.type==='app.requestClose'){requestClose().catch(fail);return;}
   if(!state)return;
   if(event.type==='steam.status'){
+    if(event.data.state==='connected')authError='';
     state.steam=event.data;renderTop();
     if(authDialogVisible&&$('#modal').open)renderAuthDialog();
     else if(event.data.state==='guard_required')connectDialog();
