@@ -1,6 +1,6 @@
 # 首版 MVP：使用、构建与本机验收
 
-更新：2026-10-17。开发归属 [MVP #10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)，开发基线为 `1cd2f9d3cf346937d55ed98a2b0e03f965258999`，分支 `codex/mvp`。最终 head、独立审查、CI 和本机构建证据以 [PROJECT_STATUS.md](../PROJECT_STATUS.md) 及对应 PR 为准。
+更新：2026-10-18。首版 macOS MVP 已由 [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 合并至 `main`（合并提交 `731c6a1aea973f4ddf786042936b8a4f610d0a48`）。原开发基线是 `1cd2f9d3cf346937d55ed98a2b0e03f965258999`；[MVP #10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10) 继续跟踪用户真实验收。最终 CI 和本机构建证据见 [PROJECT_STATUS.md](../PROJECT_STATUS.md) 及对应 PR。
 
 首版已连接桌面生产模块，覆盖库/任务、并行运行、成就/统计、研究、编辑和辅助发布。当前真实 Steam 时长增长与成就/统计写入、真实网页登录与发布、Gemini/Brave 付费 API，以及用户视觉验收均未通过。离线 fixture、合成动态库、Electron smoke 和 ad-hoc 签名只证明各自覆盖的实现路径。
 
