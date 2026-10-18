@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ResearchService, ResearchError } from '../services/research.mjs';
+import { ResearchService, ResearchError, publicPage } from '../services/research.mjs';
+import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
 
 const game = { appId: 4444, name: 'Fixture Quest', language: '简体中文', requestId: 'request-fixture' };
 const settings = { apiKey: 'fixture-only-key', searchApiKey: 'fixture-search-key', model: 'fixture-model', maxSources: 3, maxOutputTokens: 1500 };
@@ -385,4 +387,51 @@ test('invalid IDs, limits, base URLs and absent credentials fail before a paid r
   }
   await assert.rejects(service.translate({ text: 'Original' }, {}), { code: 'ai_not_configured' });
   assert.equal(calls.length, 0);
+});
+
+test('production pinned HTTPS media transport sends GET and keeps the verified DNS address', async () => {
+  const target = new URL('https://articles.example.org/fixture-review');
+  const pinned = [{ address: '93.184.216.34', family: 4 }];
+  let lookups = 0;
+  let sent = 0;
+  const response = await publicPage(target, new AbortController().signal, {
+    lookupImpl: async (host, options) => {
+      lookups++;
+      assert.equal(host, 'articles.example.org');
+      assert.deepEqual(options, { all: true, verbatim: true });
+      return pinned;
+    },
+    requestImpl: (url, options, receive) => {
+      assert.equal(url.href, target.href);
+      assert.equal(options.method, 'GET');
+      assert.equal(options.signal.aborted, false);
+      options.lookup('articles.example.org', { all: true }, (error, records) => {
+        assert.equal(error, null);
+        assert.deepEqual(records, pinned);
+      });
+      const request = new EventEmitter();
+      request.end = () => {
+        sent++;
+        queueMicrotask(() => {
+          const incoming = Readable.from([Buffer.from('Read the real page body, not its search result snippet.')]);
+          incoming.statusCode = 200;
+          incoming.headers = { 'content-type': 'text/plain' };
+          receive(incoming);
+        });
+      };
+      return request;
+    }
+  });
+  assert.equal(lookups, 1);
+  assert.equal(sent, 1);
+  assert.equal(await response.text(), 'Read the real page body, not its search result snippet.');
+});
+
+test('production pinned HTTPS media transport rejects private DNS results before opening a socket', async () => {
+  let requestCalled = false;
+  await assert.rejects(publicPage(new URL('https://articles.example.org/review'), new AbortController().signal, {
+    lookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+    requestImpl: () => { requestCalled = true; throw new Error('unexpected socket'); }
+  }), { code: 'unsafe_url' });
+  assert.equal(requestCalled, false);
 });
