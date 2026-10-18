@@ -1,6 +1,6 @@
 # 项目状态
 
-更新：2026-10-17。阶段：首版 macOS arm64 桌面 MVP 实现与交付收敛；真实 Steam、发布、付费 API 及用户视觉验收尚未通过。
+更新：2026-10-18。阶段：macOS arm64 桌面 MVP 已合并至 `main`；真实 Steam、发布、付费 API、视觉验收及正式分发尚未通过。
 
 GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md) 为准。用户于 2026-10-17 授权全权自律开发，进一步要求推进到首版完整功能 MVP，并选择 Gemini API；仅在必要时确认需求与实现细节。未决产品选项与工程默认分别记录。
 
@@ -8,9 +8,9 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 
 | 工作 | 分支 / 提交 | 记录与状态 |
 | --- | --- | --- |
-| 当前 main / MVP 开发基线 | `1cd2f9d3cf346937d55ed98a2b0e03f965258999` | 已包含调研 [PR #8](https://github.com/TeaganRicardo/SteamCuratorHub/pull/8) 与时长工具 [PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9)；不是 MVP 最终 head |
-| 完整桌面 MVP | `codex/mvp`，独立工作树；首次冻结 `d1ea2463626e72e7c04b8bb2584dffea1f4f65bf` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) / [Issue #10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：最终 head、审查及 CI 以 PR 记录为准 |
-| 时长子实验已审 head | `ee363c01eb876005a539ee70221576a8c3696d98` | PR #9 squash 合并为上述 main；历史工具验证只适用于该子实验 |
+| MVP 合并点（`main` 历史提交） | `731c6a1aea973f4ddf786042936b8a4f610d0a48` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 已于 2026-10-18 squash 合并；[主分支 CI 七项成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39134308435) |
+| 完整桌面 MVP 原 PR head | `3696effea408e93378aada8e71ac842f78a3926c` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 最终复审和补丁；[同 head 七项 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39134063102)；[#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10) 保留真实验收门槛 |
+| 前期 Steam 验证工具 | `ee363c01eb876005a539ee70221576a8c3696d98` | [PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9) 已先前 squash 合并；18 项测试只证明独立子实验 |
 
 原工作目录中的 `.workbuddy-ai/` 和 `deliverables/` 在接手时即未跟踪，保留本机且不纳入提交。验证工具及桌面 MVP 在各自独立 managed worktree 开发，不改参考原型或用户原文件。
 
@@ -30,11 +30,11 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 
 ## 当前验证范围与待完成证据
 
-首次冻结 head 的全套 **191/191 离线测试**、31 个桌面模块语法检查通过。其后独立审查修复全文链接目标校验、导入原生证据来源、凭据设置原子性及损坏凭据恢复；Windows CI 发现的只读句柄 fsync 失败已改为可写句柄持久保存，并补回归。最终测试数量与同一 head 的七个 CI 任务结果见 PR #11，保留中间 head 的失败记录。
+PR #11 的原冻结版本先有 **191/191 离线测试**通过，后续修复全文链接目标校验、导入原生证据来源、凭据设置原子性及损坏凭据恢复，并修复 Windows CI 中只读句柄 fsync 失败。2026-10-18 复审还发现生产媒体 HTTPS GET 路径遗漏 `req.end()`；已在 `dbbc83d` 修复，并于 `3696eff` 添加请求发送和私有 DNS 地址拒绝两项离线回归。现最终 PR head 和已合并的主线各自七项 CI 全绿；历史失败仍保留在 Actions 记录，不能据此跳过真实 API 验收。
 
 含开发依赖的 `npm audit` 为 0；原生 fixture 与 synthetic dylib 检查通过。Electron 44.9.0 的源码 fixture 与打包后 fixture 均已实际启动通过，覆盖七个页面切换、Node 隔离、原生 helper 合成数据、研究与发布准备。该运行时 SHA-256 校验值为 `12d873a5ae98a6598e730402e9278c5d132e97ea1a4405a7713bec2a3e83921f`。
 
-本机产物为 `dist/Steam Curator Hub-darwin-arm64/Steam Curator Hub.app`，ad-hoc `codesign --verify --deep --strict` 已通过；元数据和 smoke 报告在本机 `.local/package.json`、`.local/mvp-smoke.json` 与 `.local/packaged-smoke.json`。包声明最低 macOS 13.0，但仅本机 macOS 27 执行过当前运行检查，不能据此宣称 13.0 兼容已确认。最终独立审查、同一提交的 CI 状态和重建记录在 head 冻结后补入；以上中间工作树证据不能替代最终 head 收敛。
+前期本机保留 `dist/Steam Curator Hub-darwin-arm64/Steam Curator Hub.app` 及 `.local/package.json`、`.local/mvp-smoke.json`、`.local/packaged-smoke.json` 报告；原冻结版本 ad-hoc `codesign --verify --deep --strict` 通过。当前 `main` 的原生 fixture、源码/打包 Electron smoke、ad-hoc 打包检查已由对应 GitHub Actions 重新执行成功，但 CI 不上传安装包，GitHub 暂无供用户直接下载的正式构建。声明最低 macOS 13.0，实际本机仅 macOS 27 检查过；无法据此宣称最低系统版本兼容。尚未 Developer ID 签名或公证。
 
 CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时长 fixture；新增 `macos-15` arm64 的原生 fixture、Electron smoke 与本机打包检查。非 macOS 的原生平台测试允许明确 skip；CI 不提供凭据、不连接 Steam、不调用付费 API，不上传构建或用户数据产物。
 
@@ -51,7 +51,7 @@ CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时
 
 ## 后续顺序与真实门槛
 
-1. [#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10) 收敛完整 MVP 的最终 head、独立审查、CI、本机 smoke 与 ad-hoc 构建，保留与真实验收的边界。
+1. [#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：首版 MVP 代码已经合并，主线 CI 全绿；等待用户执行真实 Steam、AI、发布和视觉验收再判定最终关闭。
 2. [#5](https://github.com/TeaganRicardo/SteamCuratorHub/issues/5)：用户选择至少两款拥有的 AppID，至少一个未安装且 Windows-only；验证并行分钟增长、单停、成就解锁/重锁与 INT/FLOAT 提交回调和独立回读。
 3. [#6](https://github.com/TeaganRicardo/SteamCuratorHub/issues/6)：用户执行真实官方网页登录、目标/字段检查、填表及发布；长短评各自保留结果和来源，未知结果先核实再重试。
 4. [#7](https://github.com/TeaganRicardo/SteamCuratorHub/issues/7)：根据 #5/#6 结果核实当前工程选择的实际兼容范围，再确定最低系统版本和后续 Windows/正式分发路线。
