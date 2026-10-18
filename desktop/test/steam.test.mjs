@@ -40,7 +40,16 @@ function fakeClock() {
   return clock;
 }
 
-function setup({ requireGuard = false, autoLogin = true, fetchImpl } = {}) {
+function tokenFor(steamId = STEAM_ID, claims = {}) {
+  return `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ iss: 'steam', aud: ['client'], sub: steamId, exp: 4102444800, ...claims })).toString('base64url')}.synthetic`;
+}
+function sessionStore(saved = null) {
+  return { saved, writes: [], clears: 0,
+    readSteamSession() { return structuredClone(this.saved); },
+    writeSteamSession(value) { this.saved = structuredClone(value); this.writes.push(this.saved); },
+    clearSteamSession() { this.saved = null; this.clears++; } };
+}
+function setup({ requireGuard = false, autoLogin = true, fetchImpl, issueToken = false, store } = {}) {
   const clock = fakeClock();
   const clients = [];
   const events = [];
@@ -51,7 +60,10 @@ function setup({ requireGuard = false, autoLogin = true, fetchImpl } = {}) {
         { appid: 1002, name: 'Mac Game', playtime_forever: 20 }];
       clients.push(this);
     }
-    authenticate(steamId = STEAM_ID) { this.steamID = { getSteamID64: () => steamId }; this.emit('loggedOn'); }
+    authenticate(steamId = STEAM_ID) {
+      if (issueToken) this.emit('refreshToken', tokenFor(steamId));
+      this.steamID = { getSteamID64: () => steamId }; this.emit('loggedOn');
+    }
     logOn(credentials) {
       this.credentials = credentials;
       if (requireGuard) queueMicrotask(() => this.emit('steamGuard', 'mail.invalid', code => {
@@ -66,22 +78,23 @@ function setup({ requireGuard = false, autoLogin = true, fetchImpl } = {}) {
     }
     logOff() { this.logoffs = (this.logoffs || 0) + 1; this.steamID = null; this.emit('disconnected'); }
   }
-  const service = new SteamService({ SteamUserClass: FakeUser, clock, fetchImpl,
+  const service = new SteamService({ SteamUserClass: FakeUser, clock, fetchImpl, sessionStore: store,
     onEvent: event => events.push(event) });
   const login = () => service.login({ accountName: 'synthetic-account', password: ' private password ' });
   return { clock, service, clients, events, login };
 }
 
-test('login and Guard use ephemeral credentials and sanitized events; no persistent auth or force', async () => {
+test('login and Guard retain account progress while passwords/codes stay ephemeral and retry remains application-owned', async () => {
   const s = setup({ requireGuard: true });
   const pending = s.login();
   await settle();
   assert.equal(s.service.status().state, 'guard_required');
+  assert.equal(s.service.status().accountName, 'synthetic-account');
   assert.deepEqual(s.service.status().guardPrompt, { kind: 'email', lastCodeWrong: false, domain: 'mail.invalid' });
   s.service.submitGuard('12345');
   assert.equal((await pending).steamId, STEAM_ID);
   assert.deepEqual(s.clients[0].options, { dataDirectory: null, autoRelogin: false, saveAppTickets: false,
-    renewRefreshTokens: false, enablePicsCache: false });
+    renewRefreshTokens: true, enablePicsCache: false });
   assert.equal(s.clients[0].credentials.password, ' private password ');
   assert.equal(JSON.stringify(s.events).includes('private password'), false);
   assert.equal(JSON.stringify(s.events).includes('12345'), false);
@@ -104,6 +117,160 @@ test('Guard cancellation and timeout reject login; late authentication is logged
   assert.ok(s.clients[0].logoffs >= 2);
   assert.ok(s.clients[0].requests.every(request => request.apps.length === 0));
   await s.service.close();
+});
+
+test('tokens are persisted only after matching login, renewed safely, restored on restart and cleared on explicit logout', async () => {
+  const store = sessionStore(), s = setup({ store, autoLogin: false });
+  const pending = s.login(); await settle();
+  const token = tokenFor(); s.clients[0].emit('refreshToken', token);
+  assert.equal(store.saved, null); assert.equal(store.writes.length, 0);
+  s.clients[0].authenticate(); await pending;
+  assert.deepEqual(store.saved, { accountName: 'synthetic-account', steamId: STEAM_ID, refreshToken: token });
+  const renewed = tokenFor(STEAM_ID, { exp: 4102444900 });
+  s.clients[0].emit('refreshToken', renewed);
+  assert.equal(store.saved.refreshToken, renewed);
+  assert.equal(s.service.status().persistence, 'encrypted');
+  assert.equal(JSON.stringify(s.events).includes(renewed), false);
+  assert.equal(JSON.stringify(s.events).includes(token), false);
+  await s.service.close();
+  assert.equal(store.saved.refreshToken, renewed);
+  const next = setup({ store });
+  assert.equal((await next.service.restore()).steamId, STEAM_ID);
+  assert.equal(next.clients[0].credentials.refreshToken, renewed);
+  assert.equal(next.clients[0].credentials.password, undefined);
+  assert.equal(next.clients[0].credentials.accountName, undefined);
+  assert.deepEqual(next.service.runs(), []);
+  await next.service.logout(); assert.equal(store.saved, null);
+  await next.service.close(); assert.equal(next.clock.timerCount, 0);
+});
+
+test('expired, malformed, wrong-audience and identity-mismatched saved tokens are cleared before upstream login', async () => {
+  for (const token of ['not-a-token', tokenFor(STEAM_ID, { exp: 1 }), tokenFor(STEAM_ID, { aud: ['web'] }),
+    tokenFor(STEAM_ID, { iss: 'other' }), tokenFor(NEXT_ID)]) {
+    const store = sessionStore({ accountName: 'saved-account', steamId: STEAM_ID, refreshToken: token });
+    const s = setup({ store });
+    await assert.rejects(s.service.restore(), /(?:invalid_steam_session|steam_session_expired)/);
+    assert.equal(store.saved, null); assert.equal(s.clients.length, 0);
+    assert.equal(s.service.status().state, 'error');
+    assert.equal(JSON.stringify(s.events).includes(token), false);
+    await s.service.close();
+  }
+});
+
+test('revoked authentication never loops or retains a rejected reusable session', async () => {
+  for (const eresult of [5, 15, 27]) {
+    const store = sessionStore({ accountName: 'saved-account', steamId: STEAM_ID, refreshToken: tokenFor() });
+    const s = setup({ store, autoLogin: false });
+    const pending = s.service.restore(), rejected = assert.rejects(pending, { code: 'steam_auth_required' });
+    await settle(); s.clients[0].emit('error', Object.assign(new Error('private upstream token detail'), { eresult }));
+    await rejected; assert.equal(store.saved, null); assert.equal(s.service.status().restoreAvailable, false);
+    await s.clock.advance(15000); assert.equal(s.clients.length, 1);
+    assert.equal(JSON.stringify(s.events).includes('private upstream'), false);
+    await s.service.close();
+  }
+});
+
+test('transient disconnect retries only authentication with a bounded budget and never resumes prior runs', async () => {
+  const store = sessionStore(), s = setup({ store, issueToken: true }); await s.login();
+  await s.service.startRun({ appId: 1001 }); await s.service.startRun({ appId: 1002 });
+  const ids = s.service.runs().map(run => run.id);
+  for (const [index, delay] of [1000, 3000, 10000].entries()) {
+    const client = s.clients.at(-1);
+    client.emit('error', Object.assign(new Error('private network detail'), { eresult: 3 }));
+    assert.equal(s.service.status().state, 'reconnecting');
+    assert.equal(s.service.status().attempt, index + 1);
+    assert.ok(s.service.runs().every(run => run.state === 'unknown'));
+    await s.clock.advance(delay);
+    assert.equal(s.service.status().state, 'connected');
+    assert.equal(s.clients.length, index + 2);
+    assert.equal(s.clients.at(-1).credentials.password, undefined);
+    assert.ok(s.clients.at(-1).credentials.refreshToken);
+    assert.deepEqual(s.clients.at(-1).requests, []);
+    assert.deepEqual(s.service.runs().map(run => run.id), ids);
+  }
+  s.clients.at(-1).emit('disconnected', 0);
+  assert.equal(s.service.status().error, 'steam_reconnect_exhausted');
+  await s.clock.advance(20000); assert.equal(s.clients.length, 4);
+  assert.equal(JSON.stringify(s.events).includes('private network'), false);
+  await s.service.close(); assert.ok(store.saved); assert.equal(s.clock.timerCount, 0);
+});
+
+test('a token issued before the first loggedOn can recover a transient failure without rejecting its login caller', async () => {
+  const s = setup({ autoLogin: false });
+  const pending = s.login(); await settle();
+  s.clients[0].emit('refreshToken', tokenFor()); s.clients[0].emit('error', Object.assign(new Error('network'), { eresult: 3 }));
+  await s.clock.advance(1000); s.clients[1].authenticate();
+  assert.equal((await pending).state, 'connected');
+  assert.equal(s.clients[1].credentials.password, undefined);
+  await s.service.close();
+});
+
+test('logout, close and account replacement cancel retry timers and ignore late auth/token events', async () => {
+  for (const action of ['logout', 'close', 'replace']) {
+    const store = sessionStore(), s = setup({ store, issueToken: true }); await s.login();
+    const old = s.clients[0]; old.emit('disconnected', 0);
+    if (action === 'replace') await s.service.login({ accountName: 'replacement', password: 'replacement-password' });
+    else await s.service[action]();
+    const saved = structuredClone(store.saved), count = s.clients.length;
+    old.emit('refreshToken', tokenFor(NEXT_ID)); old.authenticate(NEXT_ID);
+    await s.clock.advance(20000);
+    assert.deepEqual(store.saved, saved); assert.equal(s.clients.length, count);
+    if (action === 'logout') assert.equal(store.saved, null);
+    if (action === 'close') assert.ok(store.saved);
+    if (action === 'replace') assert.equal(s.service.status().accountName, 'replacement');
+    await s.service.close(); assert.equal(s.clock.timerCount, 0);
+  }
+});
+
+test('a healthy minute resets the recovery budget while authentication timeouts remain bounded', async () => {
+  const s = setup({ issueToken: true }); await s.login();
+  s.clients[0].emit('disconnected', 0); await s.clock.advance(1000);
+  await s.clock.advance(60000);
+  s.clients[1].emit('disconnected', 0); assert.equal(s.service.status().attempt, 1);
+  await s.clock.advance(1000);
+  await s.service.close();
+  const stalled = setup({ autoLogin: false });
+  const pending = stalled.login(), rejected = assert.rejects(pending, { code: 'steam_reconnect_exhausted' });
+  await settle(); stalled.clients[0].emit('refreshToken', tokenFor());
+  await stalled.clock.advance(500000); await rejected;
+  assert.equal(stalled.clients.length, 4); await stalled.service.close();
+});
+
+test('encryption/save failures leave a visible session-only connection without leaking provider details', async () => {
+  const store = sessionStore(), write = store.writeSteamSession;
+  store.writeSteamSession = () => { throw new Error('credential_private_machine_details'); };
+  const s = setup({ store, issueToken: true }); await s.login();
+  assert.equal(s.service.status().state, 'connected'); assert.equal(s.service.status().persistence, 'session_only');
+  assert.equal(s.service.status().persistenceError, 'steam_session_save_failed'); assert.equal(store.saved, null);
+  assert.equal(JSON.stringify(s.events).includes('credential_private_machine_details'), false);
+  s.clients[0].emit('disconnected', 0); await s.clock.advance(1000);
+  assert.equal(s.service.status().state, 'connected');
+  store.writeSteamSession = write; s.clients[1].emit('refreshToken', tokenFor());
+  assert.equal(s.service.status().persistence, 'encrypted'); assert.equal(s.service.status().persistenceError, undefined);
+  await s.service.close();
+});
+
+test('failure to clear saved credentials still disconnects owned runs and reports the retained disk error', async () => {
+  const store = sessionStore(), s = setup({ store, issueToken: true }); await s.login();
+  await s.service.startRun({ appId: 1001 });
+  store.clearSteamSession = () => { throw new Error('credential_store_write_failed'); };
+  await assert.rejects(s.service.logout(), { code: 'credential_store_write_failed' });
+  assert.equal(s.service.status().state, 'logged_out'); assert.equal(s.clients[0].steamID, null);
+  assert.equal(s.service.status().persistenceError, 'credential_store_write_failed');
+  assert.ok(s.service.runs().every(run => run.state === 'stopped'));
+  await s.service.close(); assert.equal(s.clock.timerCount, 0);
+});
+
+test('restored Guard and mismatched native identity stay bound to the original reusable account', async () => {
+  const saved = { accountName: 'saved-account', steamId: STEAM_ID, refreshToken: tokenFor() };
+  const s = setup({ store: sessionStore(saved), requireGuard: true });
+  const pending = s.service.restore(); await settle();
+  assert.equal(s.service.status().state, 'guard_required'); assert.equal(s.service.status().accountName, 'saved-account');
+  s.service.submitGuard('12345'); await pending; await s.service.close();
+  const store = sessionStore(saved), mismatch = setup({ store, autoLogin: false });
+  const restoring = mismatch.service.restore(), rejected = assert.rejects(restoring, { code: 'invalid_steam_identity' });
+  await settle(); mismatch.clients[0].authenticate(NEXT_ID); await rejected;
+  assert.equal(store.saved, null); await mismatch.service.close();
 });
 
 test('owned games preserve missing Steam minutes and sanitize names without raw error leakage', async () => {
@@ -226,6 +393,14 @@ test('sleep/clock gaps pause runs and exclude the unobserved gap; host suspend a
   s.service.suspend();
   assert.equal(s.service.runs()[0].reason, 'system_sleep');
   assert.deepEqual(s.clients[0].requests.at(-1).apps, []);
+  await s.service.close();
+});
+
+test('host sleep before login or after logout does not invent an authentication error', async () => {
+  const s = setup();
+  assert.equal(s.service.suspend().state, 'logged_out');
+  await s.login(); await s.service.logout();
+  assert.equal(s.service.suspend().state, 'logged_out');
   await s.service.close();
 });
 

@@ -47,7 +47,7 @@ async function start() {
     read: key => fixtureKeys.get(key) ?? '', write: (key, value) => fixtureKeys.set(key, value) } : new SecretStore(join(dataPath, 'credentials.json'), safeStorage);
   let steam;
   const steamEvents = event => controller ? controller.steamEvent(event).catch(() => emit({ type: 'app.error', data: 'workspace_save_failed' })) : emit(event);
-  steam = fixture ? new DemoSteamService({ onEvent: steamEvents }) : new SteamService({ onEvent: steamEvents });
+  steam = fixture ? new DemoSteamService({ onEvent: steamEvents }) : new SteamService({ onEvent: steamEvents, sessionStore: secrets });
   const native = new NativeStatsService({ binaryPath: nativeBinaryPath, fixture, onEvent: emit });
   const research = fixture ? new DemoResearchService() : new ResearchService();
   const publishing = new PublishingService({ BrowserWindow, session, workspace, onEvent: emit });
@@ -114,6 +114,7 @@ async function start() {
   });
   powerMonitor.on('suspend', () => { Promise.resolve(steam.suspend?.()).catch(() => {}); });
   await window.loadURL('hub://app/index.html');
+  if (!fixture) steam.restore().catch(() => {}); // Status events retain any recovery failure for the user.
   if (smoke) await runSmoke(window, controller);
 }
 async function runSmoke(win, application) {
@@ -125,8 +126,18 @@ async function runSmoke(win, application) {
       if (!initial.fixture || !initial.workspace.tasks.length) throw new Error('fixture_bootstrap_failed');
       const task = initial.workspace.tasks[0];
       const run = await window.hub.invoke('runs.start', {taskId:task.id,stopAfterMinutes:15});
-      await window.hub.invoke('runs.stop', {appId:task.appId});
+      const second = await window.hub.invoke('task.create', {appId:1002,title:'并行演示',groupId:'45134494'});
+      await window.hub.invoke('runs.start', {taskId:second.id,stopAfterMinutes:15});
       const native = await window.hub.invoke('stats.read', {taskId:task.id});
+      const achievement = native.achievements.find(row=>row.writable!==false);
+      const preview = await window.hub.invoke('stats.preview', {taskId:task.id,changes:{achievements:[{id:achievement.id,unlocked:!achievement.unlocked}],stats:[]}});
+      const applied = await window.hub.invoke('stats.apply', {taskId:task.id,previewId:preview.id});
+      const concurrent = (await window.hub.invoke('init')).runs.filter(row=>row.state==='running');
+      if(concurrent.length!==2||!concurrent.some(row=>row.id===run.id)||applied.status!=='verified'||applied.verification.steamVerified!==false)throw new Error('concurrent_fixture_failed');
+      await window.hub.invoke('runs.stop', {appId:task.appId});
+      const remaining = (await window.hub.invoke('init')).runs.filter(row=>row.state==='running');
+      if(remaining.length!==1||remaining[0].appId!==second.appId)throw new Error('single_stop_fixture_failed');
+      await window.hub.invoke('runs.stop', {appId:second.appId});
       const research = await window.hub.invoke('research.run', {taskId:task.id,language:'schinese'});
       const attempt = await window.hub.invoke('publication.prepare', {taskId:task.id,language:'schinese',kind:'short'});
       const tabs = [...document.querySelectorAll('[data-tab]')].map(node => node.dataset.tab);
@@ -137,7 +148,7 @@ async function runSmoke(win, application) {
         if(document.querySelector('#main h1')?.textContent!==headings[name])throw new Error('tab_render_failed_'+name);
       }
       const state = await window.hub.invoke('init');
-      return {tabs,runState:run.state,nativeSource:native.source,achievements:native.achievements.length,
+      return {tabs,runState:run.state,concurrentRuns:concurrent.length,nativeApplyDuringRun:applied.verification.scope,singleStopRemaining:remaining.length,nativeSource:native.source,achievements:native.achievements.length,
         researchSources:research.sources.length,shortCount:Array.from(attempt.text).length,
         persistedTasks:state.workspace.tasks.length,hasNode:typeof process!=='undefined',
         title:document.title,bodyTextLength:document.body.textContent.length};

@@ -42,7 +42,7 @@ async function exercise(scenario) {
       this.webContents.executeJavaScript = async () => true;
     }
     isDestroyed() { return this.destroyed; }
-    async loadURL(url) { this.url = url; this.webContents.mainFrame.url = url; }
+    async loadURL(url) { this.url = url; this.webContents.mainFrame.url = url; h.timeline.push('window.loaded'); }
     isMinimized() { return false; }
     focus() {}
     close() {
@@ -57,7 +57,7 @@ async function exercise(scenario) {
     async clearStorageData() { if (h.blockClear) { h.clearStarted = true; await h.blockClear; } }, async clearCache() {} });
   const electron = { app, BrowserWindow: Window, ipcMain: { handle(_name, fn) { command = fn; } },
     protocol: { registerSchemesAsPrivileged() {}, handle() {} }, net: { fetch() { throw new Error('fixture_network_forbidden'); } },
-    safeStorage: {}, dialog: { showOpenDialog() { selected = true; return new Promise(resolve => { chooseFile = resolve; }); },
+    safeStorage: { isEncryptionAvailable: () => true }, dialog: { showOpenDialog() { selected = true; return new Promise(resolve => { chooseFile = resolve; }); },
       async showMessageBox(options) { return { response: options.title === '工作区需要恢复' ? 0 : 1 }; } },
     shell: { async openExternal() { h.externalOpened = true; } }, clipboard: { writeText() {} }, powerMonitor: new EventEmitter(),
     Menu: { setApplicationMenu() {}, buildFromTemplate(value) { return value; } },
@@ -66,7 +66,11 @@ async function exercise(scenario) {
     } } };
   globalThis.__electron = electron;
   class DemoSteam {
-    constructor() { this.items = []; globalThis.__mainHarness.steam = this; }
+    constructor({ sessionStore } = {}) {
+      this.items = []; globalThis.__mainHarness.steam = this;
+      globalThis.__mainHarness.hasSessionStore = typeof sessionStore?.readSteamSession === 'function' && typeof sessionStore?.writeSteamSession === 'function';
+    }
+    async restore() { globalThis.__mainHarness.timeline.push('steam.restore'); globalThis.__mainHarness.restores = (globalThis.__mainHarness.restores ?? 0) + 1; }
     status() { return { state: 'connected', steamId: '76561198000000000', generation: 0 }; }
     runs() { return this.items; }
     async startRun(value) {
@@ -89,10 +93,11 @@ async function exercise(scenario) {
   registerHooks({ resolve(specifier, context, next) {
     if (specifier === 'electron') return { url: dataUrl(electronSource), shortCircuit: true };
     if (specifier.endsWith('/services/demo.mjs')) return { url: dataUrl(demoSource), shortCircuit: true };
+    if (scenario === 'auth_restore' && specifier.endsWith('/services/steam.mjs')) return { url: dataUrl(`export const SteamService=${DemoSteam.toString()};`), shortCircuit: true };
     if (specifier.endsWith('/services/native-stats.mjs')) return { url: dataUrl(nativeSource), shortCircuit: true };
     return next(specifier, context);
   } });
-  process.argv.push('--fixture', `--fixture-data=${dir}`);
+  if (scenario !== 'auth_restore') process.argv.push('--fixture', `--fixture-data=${dir}`);
   const flush = async predicate => { for (let i = 0; i < 100 && !predicate(); i++) await new Promise(setImmediate); };
   try {
     if (scenario === 'recovery_exit') writeFileSync(join(dir, 'fixture-workspace.json'), '{bad');
@@ -102,6 +107,8 @@ async function exercise(scenario) {
     const sender = h.windows[0].webContents; const event = { sender, senderFrame: sender.mainFrame };
     invoke = (name, payload = {}) => command(event, name, payload);
     const initial = (await invoke('init')).value; const task = initial.workspace.tasks[0];
+    if (scenario === 'auth_restore') return { restores: h.restores, hasSessionStore: h.hasSessionStore,
+      loadedBeforeRestore: h.timeline.indexOf('window.loaded') < h.timeline.indexOf('steam.restore'), tasks: initial.workspace.tasks.length };
     if (scenario === 'ipc') {
       const foreign = await command({ sender: { mainFrame: {} }, senderFrame: {} }, 'task.update', { taskId: task.id, source: 'BAD' });
       const subframe = await command({ sender, senderFrame: { url: 'hub://app/index.html' } }, 'task.update', { taskId: task.id, source: 'BAD' });
@@ -207,6 +214,9 @@ test('failed renderer save cancels quit without closing services and permits a f
 });
 test('startup recovery exit does not create a window or start a Steam owner', options, () => {
   assert.deepEqual(run('recovery_exit'), { exited: true, windows: 0 });
+});
+test('normal startup injects the encrypted store and starts auth restore after the renderer loads without starting runs', options, () => {
+  assert.deepEqual(run('auth_restore'), { restores: 1, hasSessionStore: true, loadedBeforeRestore: true, tasks: 0 });
 });
 
 function rendererDraftHarness(values, invoke) {
