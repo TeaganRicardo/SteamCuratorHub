@@ -1,43 +1,61 @@
 # 项目状态
 
-更新：2026-10-17。阶段：技术可行性调研收敛，独立验证工具开发；新版桌面框架尚未决定。
+更新：2026-10-17。阶段：首版 macOS arm64 桌面 MVP 实现与交付收敛；真实 Steam、发布、付费 API 及用户视觉验收尚未通过。
 
-GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md) 为准。用户于 2026-10-17 授权全权自律开发，仅在必要时确认需求与实现细节；已确认范围可按独立分支、PR、审查和验证推进，未决产品选项不自动转成已确认需求。
+GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md) 为准。用户于 2026-10-17 授权全权自律开发，进一步要求推进到首版完整功能 MVP，并选择 Gemini API；仅在必要时确认需求与实现细节。未决产品选项与工程默认分别记录。
 
 ## 当前工作与精确基线
 
 | 工作 | 分支 / 提交 | 记录与状态 |
 | --- | --- | --- |
-| 本轮接手 main | `main` / `de0adcbbb9df995e3663a45db10f834eaeecda88` | 2026-10-17 重新 fetch 并核实 GitHub；不是最终交付 SHA |
-| 已有 Steam 调研 | `docs/global-project-plan` / 接手时 `272498910bb8445c39936b2ca2954a10aa0c9822` | [PR #8](https://github.com/TeaganRicardo/SteamCuratorHub/pull/8)：补充来源、发布与 AI 调研；最终 head、审查和合并结果见 PR |
-| 时长子实验工具 | `codex/steam-validation` / 已复核实现 `ee363c01eb876005a539ee70221576a8c3696d98` | [PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9)：独立工作树、离线测试和用户运行的 live 模式；后续修复及最终 head 以 PR 为准 |
+| 当前 main / MVP 开发基线 | `1cd2f9d3cf346937d55ed98a2b0e03f965258999` | 已包含调研 [PR #8](https://github.com/TeaganRicardo/SteamCuratorHub/pull/8) 与时长工具 [PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9)；不是 MVP 最终 head |
+| 完整桌面 MVP | `codex/mvp`，独立工作树；首次冻结 `d1ea2463626e72e7c04b8bb2584dffea1f4f65bf` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) / [Issue #10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：最终 head、审查及 CI 以 PR 记录为准 |
+| 时长子实验已审 head | `ee363c01eb876005a539ee70221576a8c3696d98` | PR #9 squash 合并为上述 main；历史工具验证只适用于该子实验 |
 
-原工作目录中的 `.workbuddy-ai/` 和 `deliverables/` 在接手时即未跟踪，保留本机且不纳入本轮提交。验证工具在独立 managed worktree 开发，不改参考原型或用户原文件。
+原工作目录中的 `.workbuddy-ai/` 和 `deliverables/` 在接手时即未跟踪，保留本机且不纳入提交。验证工具及桌面 MVP 在各自独立 managed worktree 开发，不改参考原型或用户原文件。
 
-## 本轮交付与结论
+## 当前 MVP 实现
 
-- [Steam 能力调研](docs/research/steam-feasibility.md)：区分 Web API、协议时长与本地成就/统计写入；补充固定上游版本、许可与回读要求。多 AppID 与无安装依赖有候选依据；目标 Mac 的真实可用性仍待用户实验。
-- [发布与会话调研](docs/research/publishing-feasibility.md)：记录个人长评、短评和独立全文链接、三个框架的会话路径及 #6 验证方案。未取得当前账号表单，未确认平台字符计数或实际发布可用性。
-- [AI 调研](docs/research/ai-feasibility.md)：从游戏名检索、实际取文、作品匹配、来源/生成隔离与失败处理；候选服务尚未选定，未调用付费 API。Steam 评论新接口与供应商保存/使用约束按当前一手文档记录。
-- [时长验证工具 PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9)：两个 AppID 完整集合请求、单停保留另一款、前中后 Steam 分钟回读；fixture 明确不能通过 Steam 验收；异常清理与本机证据保存。仅实现 #5 的时长子实验，成就/统计写入未实现。
+使用说明与逐项本机验收步骤见 [MVP.md](docs/MVP.md)。首版采用 Electron + Node.js，成就/统计由独立 Objective-C++ helper 接入当前本机 Steam 客户端；此组合是工程选择，不将私有 ABI 的 fixture 成功解释为实机可用。
 
-## 本次实际执行的验证
+- 库与商店搜索、游戏介绍、个人评测入口；单游戏唯一群组任务，累计时长目标与进度分开。
+- 同账号多 AppID 并行协议运行、单停、本次期限与累计目标；Steam 总分钟回读、本机 elapsed 和运行历史分别记录，异常停止不自动续跑。
+- 成就搜索/筛选/全球百分比/排序，单项及批量解锁/重锁，INT/FLOAT 统计修改；预览、账号/库 digest/旧值校验、Store 回调及独立进程回读，逐项保留 failed/unknown。
+- Steam 评论样本、Brave 名称搜索与实际媒体取文、来源身份/覆盖状态；Gemini 生成研究摘要和建议稿，翻译、短评摘要及 BBCode 排版。只有 Gemini 是 AI 供应商；Brave 是独立搜索工程选型。
+- 中英文文章草稿、版本冲突处理、BBCode 原文/预览、可编辑群组尾巴、纯文本短评与独立全文链接；AI 建议不会静默覆盖手改草稿。
+- 独立 Steam 网页会话、冻结发布内容与账号/目标校验、辅助填表；本人提交、结果 URL、人工确认与长评 API 回读核验分别记账。鉴赏家直接提交未实现为无条件能力。
+- 本机有界 JSON 工作区、系统加密或会话内凭据、备份导出/恢复、损坏文件恢复路径；Electron fixture smoke 与 arm64 ad-hoc 打包脚本。
 
-- 本机 macOS 27.0.1 / arm64、Node.js 26.10.0：时长工具在 `ee363c01eb876005a539ee70221576a8c3696d98` 的 18 项离线测试通过，fixture 完整运行。覆盖目标/账号校验、并行集合、单停、回读缺失/延迟取消、断线/冲突、保存失败、清理未知、睡眠/时钟异常与依赖加载/编解码。
-- 锁定传递依赖修复后 `npm audit` 为 0；仅证明本次已知漏洞审计与测试覆盖的路径，真实认证及所有上游功能未验证。
-- 两个独立审查在同一实现 head 复核通过：补修登录超时取消 Guard 提示与读回跨时钟间隙；合成 PTY 验证超时后退出，无真实登录。
-- PR #9 配置 macOS / Windows / Linux × Node 22 / 24 CI。最终 head 的运行结果与独立审查记录在 PR，不能把首次实现的测试迁移成后续版本的验证。
-- 三份报告依据一手文档/源码，执行相对链接和差异空白检查；文档调研不等于接口实测。
+工程默认：简体中文界面，文章语言独立；隐藏成就默认折叠；严格少于 200 个 Unicode 码点；关窗清理、先到先停；不做自动领取或云同步。当前 Windows 原生写入/安装包、最低 macOS 版本、Developer ID 签名/公证仍未验收。
 
-未执行真实 Steam 登录、游戏运行/时长增长、成就解锁/重锁、整型/浮点统计提交、网页填表/登录/发布、付费 AI 调用或 GUI 验收。未发布可安装的新应用。
+## 当前验证范围与待完成证据
 
-## 需求与后续顺序
+首次冻结 head 的全套 **191/191 离线测试**、31 个桌面模块语法检查通过。其后独立审查修复全文链接目标校验、导入原生证据来源、凭据设置原子性及损坏凭据恢复；Windows CI 发现的只读句柄 fsync 失败已改为可写句柄持久保存，并补回归。最终测试数量与同一 head 的七个 CI 任务结果见 PR #11，保留中间 head 的失败记录。
 
-1. [#2](https://github.com/TeaganRicardo/SteamCuratorHub/issues/2)、[#3](https://github.com/TeaganRicardo/SteamCuratorHub/issues/3)、[#4](https://github.com/TeaganRicardo/SteamCuratorHub/issues/4) 按三份调研报告收敛；只关闭资料调研，不关闭实机门槛。
-2. [#5](https://github.com/TeaganRicardo/SteamCuratorHub/issues/5) 保持开放：用户选两款拥有的 AppID（至少一个未安装且 Windows-only），手动运行时长子实验并核对 Steam；继续开发独立成就/统计 native 实验，必须观察提交回调和独立回读，不能以幂等设值或 SDK 布尔返回替代。
-3. [#6](https://github.com/TeaganRicardo/SteamCuratorHub/issues/6) 保持开放：按发布报告建立最小会话/表单验证壳；登录、游戏实机、视觉与真实发布验收由用户执行。模板与字符计数等到相应流程再确认。
-4. [#7](https://github.com/TeaganRicardo/SteamCuratorHub/issues/7) 等 #5/#6 的实际证据后决定桌面框架、Steam 组件、最低系统版本与分发组合。独立 CLI 的 Node.js 不构成桌面框架定案。
-5. 按确定的技术组合逐个交付库/任务、研究、编辑与发布流程。供应商和付费预算只在真实 AI 接入前确认；无需一次性决定所有产品选项。
+含开发依赖的 `npm audit` 为 0；原生 fixture 与 synthetic dylib 检查通过。Electron 44.9.0 的源码 fixture 与打包后 fixture 均已实际启动通过，覆盖七个页面切换、Node 隔离、原生 helper 合成数据、研究与发布准备。该运行时 SHA-256 校验值为 `12d873a5ae98a6598e730402e9278c5d132e97ea1a4405a7713bec2a3e83921f`。
+
+本机产物为 `dist/Steam Curator Hub-darwin-arm64/Steam Curator Hub.app`，ad-hoc `codesign --verify --deep --strict` 已通过；元数据和 smoke 报告在本机 `.local/package.json`、`.local/mvp-smoke.json` 与 `.local/packaged-smoke.json`。包声明最低 macOS 13.0，但仅本机 macOS 27 执行过当前运行检查，不能据此宣称 13.0 兼容已确认。最终独立审查、同一提交的 CI 状态和重建记录在 head 冻结后补入；以上中间工作树证据不能替代最终 head 收敛。
+
+CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时长 fixture；新增 `macos-15` arm64 的原生 fixture、Electron smoke 与本机打包检查。非 macOS 的原生平台测试允许明确 skip；CI 不提供凭据、不连接 Steam、不调用付费 API，不上传构建或用户数据产物。
+
+真实 Steam 登录/分钟增长、未安装 Windows-only 游戏上的原生读写、官方网页字段及发布结果、Gemini/Brave 实际 API、Gatekeeper 分发和用户视觉检查都保留为未通过门槛，由用户在本机执行。fixture 与私有 ABI 合成库测试只证明相应本地路径；没有真实结果时不关闭 #5/#6/#7。
+
+## 前序调研与子实验
+
+- [Steam 能力调研](docs/research/steam-feasibility.md)：区分 Web API、协议时长与本地成就/统计写入；有固定上游版本、许可与回读要求，实际 Mac 兼容性仍待用户验证。
+- [发布与会话调研](docs/research/publishing-feasibility.md)：记录个人长评、短评和独立全文链接、框架会话路径及 #6 验证方案；文档本身不证明当前账号表单可用。
+- [AI 调研](docs/research/ai-feasibility.md)：早期候选服务、实际取文、作品匹配、来源/生成隔离与失败处理；当前供应商已按需求更新为 Gemini，媒体检索工程实现为 Brave。
+- [时长验证工具 PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9)：两个 AppID 完整集合请求、单停保留另一款、前中后 Steam 分钟回读；fixture 明确不能通过 Steam 验收，异常清理与本机证据保存。
+
+前序在 `ee363c01eb876005a539ee70221576a8c3696d98` 执行 18 项时长工具离线测试与 fixture，两个独立审查复核通过，补修登录超时取消 Guard 提示及读回跨时钟间隙。该记录只描述子实验，不覆盖当前桌面模块。PR #8/#9 合并状态和精确提交见 GitHub。
+
+## 后续顺序与真实门槛
+
+1. [#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10) 收敛完整 MVP 的最终 head、独立审查、CI、本机 smoke 与 ad-hoc 构建，保留与真实验收的边界。
+2. [#5](https://github.com/TeaganRicardo/SteamCuratorHub/issues/5)：用户选择至少两款拥有的 AppID，至少一个未安装且 Windows-only；验证并行分钟增长、单停、成就解锁/重锁与 INT/FLOAT 提交回调和独立回读。
+3. [#6](https://github.com/TeaganRicardo/SteamCuratorHub/issues/6)：用户执行真实官方网页登录、目标/字段检查、填表及发布；长短评各自保留结果和来源，未知结果先核实再重试。
+4. [#7](https://github.com/TeaganRicardo/SteamCuratorHub/issues/7)：根据 #5/#6 结果核实当前工程选择的实际兼容范围，再确定最低系统版本和后续 Windows/正式分发路线。
+5. 用户本机填写 Gemini 模型/密钥及 Brave Search 密钥，验证实际检索、取文与生成。当前不执行付费试调用，也不将空配置下的 Steam 样本报告为完整站外研究。
 
 ## 既有参考快照与历史验证
 
