@@ -154,14 +154,14 @@ async function readResponse(response, limit, signal) {
 
 // Pin the checked DNS result into the actual socket lookup. A second unchecked DNS lookup
 // by fetch would leave a rebinding gap between the private-address check and the connection.
-async function publicPage(url, signal) {
+export async function publicPage(url, signal, { lookupImpl = lookup, requestImpl = httpsRequest } = {}) {
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const addresses = isIP(host) ? [{ address: host, family: isIP(host) }] :
-    await lookup(host, { all: true, verbatim: true });
+    await lookupImpl(host, { all: true, verbatim: true });
   checkAbort(signal);
   if (!addresses.length || addresses.some(item => !publicAddress(item.address))) throw new ResearchError('unsafe_url');
   return new Promise((resolve, reject) => {
-    const req = httpsRequest(url, { method: 'GET', signal,
+    const req = requestImpl(url, { method: 'GET', signal,
       headers: { Accept: 'text/html,text/plain;q=0.9', 'User-Agent': 'SteamCuratorHub/0.1 (article research)' },
       lookup: (_hostname, options, callback) => {
         if (options.all) callback(null, addresses);
@@ -191,6 +191,8 @@ async function publicPage(url, signal) {
       });
     });
     req.on('error', reject);
+    // ClientRequest does not send until end() is called, including for GET.
+    req.end();
   });
 }
 
