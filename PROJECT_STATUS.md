@@ -49,6 +49,16 @@ CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时
 
 前序在 `ee363c01eb876005a539ee70221576a8c3696d98` 执行 18 项时长工具离线测试与 fixture，两个独立审查复核通过，补修登录超时取消 Guard 提示及读回跨时钟间隙。该记录只描述子实验，不覆盖当前桌面模块。PR #8/#9 合并状态和精确提交见 GitHub。
 
+## 2026-10-18 用户首轮真实构筑反馈
+
+本轮用户已在 RDC 主机自行编译并体验最新构筑（未测试 Gemini/Brave API key 功能及真实发布）。新增三个首版 P0 阻断：
+
+- [#13](https://github.com/TeaganRicardo/SteamCuratorHub/issues/13)：当前 MVP UI/UX 判定不可用；MVP 界面仅保留为功能验证壳，正式前端实现前必须经过多轮用户交互确认。
+- [#14](https://github.com/TeaganRicardo/SteamCuratorHub/issues/14)：协议登录提交后存在反馈空窗，且当前 SteamService 显式关闭 auto relogin / refresh-token renewal；要求可见登录状态、加密持久会话及应用内有界重连。
+- [#15](https://github.com/TeaganRicardo/SteamCuratorHub/issues/15)：当前 controller / renderer 主动互斥协议模拟运行与 native 成就/统计操作；用户确认两者必须可同时使用，需要改 contract 与回归测试。
+
+因此“完整 MVP 已实现”仅成立于离线功能接线层面，不能视为产品可用或发布候选。#10 保持 Open。
+
 ## 后续顺序与真实门槛
 
 1. [#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：首版 MVP 代码已经合并，主线 CI 全绿；等待用户执行真实 Steam、AI、发布和视觉验收再判定最终关闭。
