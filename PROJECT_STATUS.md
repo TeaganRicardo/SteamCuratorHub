@@ -59,6 +59,17 @@ CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时
 
 因此“完整 MVP 已实现”仅成立于离线功能接线层面，不能视为产品可用或发布候选。#10 保持 Open。
 
+## 2026-10-18 P0 底层修复
+
+接手远端 `main` 为 `7f3fb8ad26f187a8a80f7cfb17f9369e36043c6c`；复核并合并仅同步用户需求的 [PR #16](https://github.com/TeaganRicardo/SteamCuratorHub/pull/16) 后，开发基线为 `24be6a8eea3ae44c8c82c7a1054a1fa3c1d1b237`。修复分支 `codex/session-and-stats-fixes` 使用新的独立工作树，不改已有用户目录或 MVP 工作树；实现与最终 head、审查、构建及 CI 记录见 [PR #17](https://github.com/TeaganRicardo/SteamCuratorHub/pull/17)。
+
+- #14：登录提交、Guard、成功/失败保持同一可见上下文，包含账号、阶段与明确错误；加密保存已确认账号的 refresh token 并接入启动恢复与续期。应用管理三次有界重连；退出应用保留保存会话，显式退出连接清除；密码不保存，认证恢复不恢复模拟运行。
+- #15：移除 controller 和 renderer 的全局 run/native 互斥。保留原生操作自身串行、账号/预览/旧值校验和未知写入门禁；新增真实 controller + SteamService 的合成边界回归，覆盖相同/其他 AppID 读写、运行 preflight 并行、写入期间独立启停和完整 `gamesPlayed` 集合。
+- 凭据回滚文件不保留 Steam 会话；设置预备提交检测凭据版本，避免覆盖刚续期或清除的会话。加密不可用或写盘失败保留明确 session-only / persistenceError，不使用明文回退。
+- 本机已执行 241/241 项完整离线测试、桌面语法检查与时长 fixture，含开发依赖的漏洞审计为 0。Electron fixture smoke 已通过：在同一 AppID active 时执行真实 helper 的合成读写，检查双运行、单停和 Node 隔离；最终构建与精确提交结果以 PR #17 的交付记录为准。
+
+#13 的正式 UI 仍冻结；本轮只修功能验证壳的登录状态反馈。#14/#15 的代码回归不替代用户真实 Steam 重验；#5/#6/#7/#10 继续保持开放，不据此标记发布候选。
+
 ## 后续顺序与真实门槛
 
 1. [#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：首版 MVP 代码已经合并，主线 CI 全绿；等待用户执行真实 Steam、AI、发布和视觉验收再判定最终关闭。

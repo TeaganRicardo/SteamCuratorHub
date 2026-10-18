@@ -3,7 +3,7 @@ import { renderBBCode } from './bbcode.mjs';
 const $ = selector => document.querySelector(selector);
 const main = $('#main');
 const tabs = [ ['library','▦','游戏库'], ['tasks','▤','评测任务'], ['runs','▷','运行与时长'], ['achievements','◇','成就与统计'], ['research','⌕','资料研究'], ['editor','✎','评测编辑'], ['settings','⚙','设置'] ];
-const labels = { connected:'已连接', logged_out:'未连接', logging_in:'正在连接', guard_required:'等待 Steam Guard', error:'连接中断', closed:'已关闭',
+const labels = { connected:'已连接', logged_out:'未连接', logging_in:'正在验证登录', restoring:'正在恢复已保存会话', reconnecting:'正在重新连接', guard_required:'等待 Steam Guard', error:'连接未完成', closed:'已关闭',
   running:'运行请求中', stopped:'已请求停止', paused:'已暂停', unknown:'待核实', outcome_unknown:'结果未知', verified:'已回读核实', failed:'失败',
   prepared:'已准备', filled:'已填入页面', submitted_unknown:'提交结果待核实', user_confirmed:'用户已确认', imported_unverified:'导入记录待核实',
   active:'进行中', completed:'已完成', archived:'已归档', collected:'已采集', operator_acknowledged:'已人工检查', fixture_only:'仅演示数据' };
@@ -24,6 +24,7 @@ const errors = {
   long_review_result_url_mismatch:'请填写对应账号、游戏的 Steam 个人评测链接。', publication_unknown:'该次发布结果未知，先核对结果后再继续。'
 };
 Object.assign(errors,{credential_store_unreadable:'本机凭据文件不可读。任务与草稿仍可使用，请到设置恢复凭据。',credential_store_corrupt:'本机凭据文件损坏。任务与草稿仍可使用，请到设置恢复凭据。',credential_decryption_failed:'系统未能解密凭据，请检查本机系统密钥链。',credential_store_write_failed:'凭据保存失败，原密钥仍保留。请检查本机磁盘与权限后重试。',credential_store_reset_failed:'凭据归档失败，原文件仍保留。请检查本机磁盘与权限。',configuration_save_incomplete:'设置未完整保存，请检查磁盘权限并重新填写凭据配置。',full_review_url_requires_numeric_profile:'请使用 steamcommunity.com/profiles/SteamID64/recommended/AppID/ 格式的个人评测链接，账号与游戏须对应当前任务。'});
+Object.assign(errors,{steam_credentials_rejected:'Steam 拒绝了登录凭据，请检查账号和密码后重试。',steam_auth_required:'已保存会话已失效或需要重新授权，请重新登录。',steam_session_expired:'已保存会话已过期，请重新登录。',invalid_steam_session:'已保存会话不可用，请重新登录。',steam_reconnect_exhausted:'自动重连已达到本次上限，请检查网络后重试恢复连接。',steam_disconnected:'Steam 连接已断开。',steam_error:'Steam 未能完成连接，请检查网络后重试。',steam_session_conflict:'Steam 报告其他登录会话冲突，请检查账号会话后重试。',login_timeout:'Steam 登录等待超时，请检查网络后重试。',login_failed:'Steam 登录请求未完成，请重试。',steam_session_save_failed:'会话未能加密保存，本次连接仍可使用；下次启动可能需要重新登录。',credential_store_changed_retry:'会话或密钥刚刚更新，请重试保存设置。'});
 let state;
 let activeTab = 'library';
 let taskId = null;
@@ -46,6 +47,10 @@ let toastTimer;
 let refreshSequence = 0;
 let uiEpoch = 0;
 let nativeReadSequence = 0;
+let authDialogVisible = false;
+let authAttempt = 0;
+let authAccountName = '';
+let authError = '';
 const buffers = new Map();
 const suggestions = new Map();
 const busyTasks = new Set();
@@ -131,13 +136,13 @@ function renderTop() {
   const status = state.steam;
   $('#account-status').replaceChildren(h('div', { class: 'account-name' }, h('span', { class: `status-dot ${status.state}` }), state.fixture ? '演示工作区' : status.displayName || labels[status.state] || status.state),
     h('div', { class: 'account-id' }, state.workspace.activeSteamId || '未绑定 SteamID'));
-  $('#account-button').textContent = status.state === 'connected' ? '账号与连接' : '连接 Steam';
+  $('#account-button').textContent = status.state === 'connected' ? '账号与连接' : ['logging_in','restoring','reconnecting','guard_required'].includes(status.state) ? '查看登录进度' : '连接 Steam';
   $('#mode-label').textContent = state.fixture ? '演示模式 · 合成数据，不连接 Steam' : '个人鉴赏家工作台';
   $('#task-picker').replaceChildren(h('option', { value: '' }, '选择评测任务'), ...state.workspace.tasks.map(item => h('option', { value: item.id }, `${item.title} · ${item.appId}`)));
   $('#task-picker').value = taskId ?? '';
   $('#language-picker').value = language;
   const running = state.runs.filter(run => run.state === 'running').length;
-  $('#statusbar').replaceChildren(h('span', {}, `${labels[status.state] ?? status.state} · ${running} 款运行中`), h('span', {}, `文章：${language === 'schinese' ? '简体中文' : 'English'}`),
+  $('#statusbar').replaceChildren(h('span', {}, `${status.accountName ? `${status.accountName} · ` : ''}${labels[status.state] ?? status.state}${status.error ? `：${errors[status.error] ?? status.error}` : ''} · ${running} 款运行中`), h('span', {}, `文章：${language === 'schinese' ? '简体中文' : 'English'}`),
     h('span', { class: 'spacer' }), h('span', {}, state.fixture ? '所有运行和写入结果仅为演示' : '工作区与凭据分别保存在本机'));
 }
 function render() {
@@ -151,30 +156,66 @@ function requireTask() {
   return false;
 }
 function dialog(title, content, actions = []) {
+  authDialogVisible = false;
   const box = $('#modal'); if (box.open) box.close();
   $('#modal-content').replaceChildren(h('h2', {}, title), content, h('div', { class: 'actions' }, button('关闭', () => box.close(), 'subtle'), ...actions)); box.showModal();
 }
 function connectDialog() {
-  if (state.steam.state === 'connected') {
-    dialog('Steam 连接', h('div', {}, h('p', {}, `当前协议账号：${state.steam.steamId}`), h('p', { class: 'muted' }, '网页发布与本机成就进程仍会分别核对账号。退出后保留本地草稿，并停止此协议会话的运行请求。')),
-      [button('退出连接并停止运行', async () => { $('#modal').close(); await window.hub.invoke('steam.logout'); await refresh(); })]); return;
-  }
-  const name = h('input', { autocomplete: 'username', placeholder: 'Steam 账号名' });
-  const password = h('input', { type: 'password', autocomplete: 'current-password', placeholder: '密码仅在内存中使用' });
-  dialog('连接 Steam', h('div', { class: 'stack' }, field('账号名', name), field('密码', password), h('p', { class: 'inline-note' }, 'Steam Guard 由你本人完成。此应用不保存密码、refresh token 或 Steam 登录会话文件。')),
-    [button('连接', async () => {
-      const credentials = { accountName: name.value, password: password.value }; password.value = '';
-      $('#modal').close(); toast('正在连接 Steam，可能需要 Steam Guard…');
-      await window.hub.invoke('steam.login', credentials); credentials.password = ''; await refresh(false);
-      await loadCatalog('library', libraryQuery, { force: true, automatic: true });
-    }, 'primary')]);
+  authDialogVisible = true; renderAuthDialog();
 }
-function guardDialog(prompt) {
-  const code = h('input', { autocomplete: 'one-time-code', placeholder: 'Steam Guard 验证码' });
-  dialog('Steam Guard 验证', h('div', { class: 'stack' }, h('p', { class: 'muted' }, prompt.kind === 'email' ? `请输入邮件验证码${prompt.domain ? `（${prompt.domain}）` : ''}。` : '请输入手机验证码；如果手机要求确认登录，请由本人完成。'),
-    prompt.lastCodeWrong ? note('上一个验证码无效，请重新输入。') : null, code),
-    [button('提交验证码', async () => { const value = code.value; code.value = ''; $('#modal').close(); await window.hub.invoke('steam.guard', { code: value }); }, 'primary'),
-      button('取消登录', async () => { $('#modal').close(); await window.hub.invoke('steam.logout'); await refresh(); }, 'subtle')]);
+async function authenticate(command, payload = {}) {
+  const attempt = ++authAttempt; authError = '';
+  authAccountName = payload.accountName?.trim() || state.steam.accountName || authAccountName;
+  state.steam = { ...state.steam, state: command === 'steam.restore' ? 'restoring' : 'logging_in', accountName: authAccountName, error: undefined };
+  renderTop(); renderAuthDialog();
+  try {
+    const pending = window.hub.invoke(command, payload);
+    delete payload.password;
+    await pending;
+    if (attempt !== authAttempt) return;
+    await refresh(false);
+    if (authDialogVisible && $('#modal').open) renderAuthDialog();
+    await loadCatalog('library', libraryQuery, { force: true, automatic: true }).catch(fail);
+  } catch (error) {
+    if (attempt !== authAttempt) return;
+    await refresh(false); authError = errors[error.code ?? error.message] ?? 'Steam 连接未完成，请重试。';
+    if (authDialogVisible && $('#modal').open) renderAuthDialog();
+  } finally { delete payload.password; }
+}
+function renderAuthDialog() {
+  const status = state.steam, box = $('#modal');
+  const busy = ['logging_in','restoring','reconnecting','guard_required'].includes(status.state);
+  const content = h('div', { class: 'stack' }, h('div', { id: 'steam-login-progress', role: 'status', 'aria-live': 'polite' },
+    h('p', {}, `账号：${status.accountName || authAccountName || '尚未输入'}`), h('p', {}, labels[status.state] ?? status.state),
+    status.state === 'reconnecting' ? h('p', {}, `自动重连 ${status.attempt ?? 0} / ${status.maxAttempts ?? 3}；运行请求已停止，连接恢复后不会自动续跑。`) : null));
+  const actions = [];
+  if (status.state === 'connected') {
+    content.append(h('p', {}, `当前协议账号：${status.steamId}`), h('p', {}, status.persistence === 'encrypted' ? '会话已加密保存，下次启动会自动恢复。' : '当前连接可用，会话尚未持久保存。'),
+      h('p', { class: 'inline-note' }, '网页发布与本机成就进程分别核对账号。退出连接将清除保存的协议会话，并停止运行请求；本地草稿保留。'));
+    actions.push(button('退出连接并停止运行', async () => { ++authAttempt; authError = ''; await window.hub.invoke('steam.logout'); await refresh(false); renderAuthDialog(); }));
+  } else if (status.state === 'guard_required') {
+    const prompt = status.guardPrompt ?? {}, code = h('input', { autocomplete: 'one-time-code', placeholder: 'Steam Guard 验证码' });
+    content.append(h('p', {}, prompt.kind === 'email' ? `请输入邮件验证码${prompt.domain ? `（${prompt.domain}）` : ''}。` : '请输入手机验证码；如果手机要求确认登录，请由本人完成。'),
+      prompt.lastCodeWrong ? note('上一个验证码无效，请重新输入。') : '', code);
+    actions.push(button('提交验证码', async () => {
+      const value = code.value; code.value = ''; authError = '';
+      try { await window.hub.invoke('steam.guard', { code: value }); }
+      catch (error) { authError = errors[error.code ?? error.message] ?? '验证码提交未完成，请检查后重试。'; renderAuthDialog(); }
+    }, 'primary'));
+  } else if (!busy) {
+    const name = h('input', { autocomplete: 'username', placeholder: 'Steam 账号名', value: status.accountName || authAccountName });
+    const password = h('input', { type: 'password', autocomplete: 'current-password', placeholder: '密码仅在内存中使用' });
+    content.append(field('账号名', name), field('密码', password), h('p', { class: 'inline-note' }, '密码和验证码不会保存；可复用会话使用本机系统加密保存，不随工作区备份导出。'));
+    actions.push(button('连接', () => { const payload = { accountName: name.value, password: password.value }; password.value = ''; return authenticate('steam.login', payload); }, 'primary'));
+    if (status.restoreAvailable || (state.credentials.steamSessionConfigured && !['steam_auth_required','steam_session_expired','invalid_steam_session','steam_credentials_rejected'].includes(status.error))) actions.push(button('重试恢复连接', () => authenticate('steam.restore')));
+  }
+  if (busy) actions.push(button('取消登录', async () => { ++authAttempt; authError = ''; await window.hub.invoke('steam.logout'); await refresh(false); renderAuthDialog(); }, 'subtle'));
+  const message = authError || (status.error && (errors[status.error] ?? status.error));
+  if (message) content.append(note(message));
+  if (status.persistenceError) content.append(note(`会话保存或清除未完成：${errors[status.persistenceError] ?? status.persistenceError}`));
+  $('#modal-content').replaceChildren(h('h2', {}, status.state === 'connected' ? 'Steam 连接' : '连接 Steam'), content,
+    h('div', { class: 'actions' }, button('关闭', () => { authDialogVisible = false; box.close(); }, 'subtle'), ...actions));
+  if (!box.open) box.showModal();
 }
 function createTaskDialog(game) {
   const groups = select(state.workspace.groups.map(g => [g.id, g.name]), state.workspace.groups[0]?.id);
@@ -306,7 +347,6 @@ function renderAchievements() {
   main.append(heading('成就与统计', '按 AppID 读取本机 Steam 状态，先预览改动，再提交与回读。'));
   if (!requireTask()) return;
   const current=task();
-  if (state.runs.some(run=>run.state==='running')) main.append(note('请先停止协议运行，再读取或修改成就。原生 Steam 上下文可能与运行会话冲突。'));
   main.append(h('div',{class:'actions'},pill(current.title),pill(`AppID ${current.appId}`),button('读取 / 刷新 Steam 状态',async()=>{
     const context=captureContext(current),sequence=++nativeReadSequence;
     const result=await window.hub.invoke('stats.read',{taskId:current.id});
@@ -609,8 +649,12 @@ async function requestClose(){
 window.hub.onEvent(event=>{
   if(event.type==='app.requestClose'){requestClose().catch(fail);return;}
   if(!state)return;
-  if(event.type==='steam.guard')guardDialog(event.data);
-  else if(event.type==='steam.status'){state.steam=event.data;renderTop();}
+  if(event.type==='steam.status'){
+    if(event.data.state==='connected')authError='';
+    state.steam=event.data;renderTop();
+    if(authDialogVisible&&$('#modal').open)renderAuthDialog();
+    else if(event.data.state==='guard_required')connectDialog();
+  }
   else if(event.type==='steam.runs'){state.runs=event.data;renderTop();if(activeTab==='runs'&&!main.querySelector('input:focus'))render();}
   else if(event.type==='workspace.changed')refresh(false).then(()=>{if(activeTab==='editor')updatePublications();}).catch(fail);
   else if(event.type==='app.error')toast('工作区保存未完成，请检查本机磁盘与权限。',true);
@@ -621,5 +665,6 @@ try{
   state=await window.hub.invoke('init');language=state.workspace.settings.articleLanguage;hideHidden=state.workspace.settings.hideHiddenAchievements;
   taskId=state.workspace.tasks.find(item=>item.status==='active')?.id??state.workspace.tasks[0]?.id??null;
   activeTab=taskId?'tasks':'library';renderTop();render();
+  if(state.steam.state==='guard_required')connectDialog();
   if(state.fixture)await loadCatalog('library', libraryQuery, { force: true, automatic: true });
 }catch(error){main.replaceChildren(empty('工作区暂时无法打开',errors[error.code??error.message]??error.message));}

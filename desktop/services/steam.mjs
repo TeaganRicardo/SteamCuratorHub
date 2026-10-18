@@ -1,11 +1,20 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
+import { refreshTokenIdentity } from './steam-session.mjs';
 
 const MAX_APPS = 100000;
 const MAX_PARALLEL = 32;
 const MAX_BODY = 2 * 1024 * 1024;
 const READBACK_INTERVAL = 60000;
 const GAP_LIMIT = 6000;
+const RECONNECT_DELAYS = [1000, 3000, 10000];
+const TRANSIENT_RESULTS = new Set([0, 2, 3, 10, 16, 20, 35, 36, 48]);
+const AUTH_RESULTS = new Set([5, 15, 27, 63, 65, 66, 71, 74, 85, 88]);
+const CONFLICT_RESULTS = new Set([6, 34, 50]);
+const NETWORK_ERRORS = new Set(['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH']);
+const SESSION_ERRORS = new Set(['credential_encryption_unavailable', 'credential_encryption_unavailable_use_session_only',
+  'credential_decryption_failed', 'credential_store_unreadable', 'credential_store_write_failed', 'credential_store_changed_retry',
+  'invalid_steam_session', 'steam_session_expired']);
 
 function failure(code) { return Object.assign(new Error(code), { code }); }
 function appIdOf(value) {
@@ -29,10 +38,16 @@ function imageUrl(value) {
 
 /** Steam protocol sessions are separate from browser publishing and native stats sessions. */
 export class SteamService {
-  constructor({ onEvent = () => {}, fetchImpl = globalThis.fetch, SteamUserClass, clock = {} } = {}) {
+  constructor({ onEvent = () => {}, fetchImpl = globalThis.fetch, SteamUserClass, sessionStore, clock = {} } = {}) {
     this._onEvent = onEvent;
     this._fetch = fetchImpl;
     this._SteamUserClass = SteamUserClass;
+    this._sessionStore = sessionStore;
+    this._auth = null;
+    this._loginTimer = null;
+    this._retryTimer = null;
+    this._stableTimer = null;
+    this._reconnectAttempts = 0;
     this._clock = { now: Date.now, monotonicNow: () => performance.now(), setTimeout, clearTimeout,
       setInterval, clearInterval, ...clock };
     this._generation = 0;
@@ -57,7 +72,11 @@ export class SteamService {
     try { this._onEvent({ type, data: structuredClone(data) }); } catch { /* Observers cannot own the session. */ }
   }
   _setStatus(value) {
-    this._status = { ...value, generation: this._generation };
+    const auth = this._auth;
+    this._status = { ...value, ...(auth ? { accountName: auth.accountName, persistence: auth.persistence,
+      restoreAvailable: Boolean(auth.refreshToken), ...(auth.persistenceError ? { persistenceError: auth.persistenceError } : {}) } : {}),
+      generation: this._generation };
+    if (auth && !auth.persistenceError) delete this._status.persistenceError;
     this._emit('steam.status', this._status);
   }
   _check(generation = this._generation) {
@@ -73,41 +92,91 @@ export class SteamService {
     if (this._closed) throw failure('service_closed');
     if (typeof accountName !== 'string' || !accountName.trim() || accountName.length > 128 ||
         typeof password !== 'string' || !password || password.length > 1024) throw failure('invalid_credentials');
+    // Replacing an account must not leave its reusable credentials on disk.
+    this._sessionStore?.clearSteamSession();
+    return this._beginLogin({ accountName: accountName.trim(), password }, {
+      accountName: accountName.trim(), refreshToken: null, steamId: null, persistence: 'pending'
+    }, 'logging_in');
+  }
+
+  async restore() {
+    if (this._closed) throw failure('service_closed');
+    if (this._status.state === 'connected') return this.status();
+    if (this._pendingLogin || this._retryTimer || this._client) throw failure('steam_login_in_progress');
+    let saved, persisted;
+    try {
+      persisted = this._sessionStore?.readSteamSession();
+      saved = persisted ?? (this._auth?.refreshToken ? this._auth : null);
+      if (!saved) return this.status();
+      if (refreshTokenIdentity(saved.refreshToken, this._clock.now()) !== saved.steamId) throw failure('invalid_steam_session');
+    } catch (error) {
+      const clearError = ['invalid_steam_session', 'steam_session_expired'].includes(error.message) ? this._forgetReusable() : null;
+      this._setStatus({ state: 'error', error: this._sessionError(error), ...(clearError ? { persistenceError: clearError } : {}) });
+      throw failure(this._sessionError(error));
+    }
+    return this._beginLogin({ refreshToken: saved.refreshToken }, { ...saved, persistence: persisted ? 'encrypted' : 'session_only' }, 'restoring');
+  }
+
+  _beginLogin(credentials, auth, state) {
     const previous = this._client;
     this._freezeRuns('unknown', 'account_changed');
     this._emitRuns();
     const generation = ++this._generation;
     this._invalidate('account_changed');
     this._client = null;
+    this._auth = auth;
+    this._reconnectAttempts = 0;
     this._runRecords.clear();
     this._emitRuns();
-    this._setStatus({ state: 'logging_in' });
+    this._session = new AbortController();
+    let resolve, reject;
+    const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+    this._pendingLogin = { resolve, reject, promise };
+    this._setStatus({ state });
+    this._connect(credentials, generation, previous).catch(() => {
+      if (generation === this._generation && !this._closed) this._fault('steam_client_unavailable');
+    });
+    return promise;
+  }
+
+  async _connect(credentials, generation, previous) {
     await this._closeClient(previous);
-    if (generation !== this._generation || this._closed) throw failure('account_changed');
+    if (generation !== this._generation || this._closed) return;
     let SteamUser;
     try { SteamUser = this._SteamUserClass ?? (await import('steam-user')).default; }
-    catch { this._setStatus({ state: 'error', error: 'steam_client_unavailable' }); throw failure('steam_client_unavailable'); }
-    if (generation !== this._generation || this._closed) throw failure('account_changed');
+    catch { if (generation === this._generation) this._fault('steam_client_unavailable'); return; }
+    if (generation !== this._generation || this._closed) return;
     let client;
     try {
+      // The application owns the retry budget and never resumes gamesPlayed.
       client = new SteamUser({ dataDirectory: null, autoRelogin: false, saveAppTickets: false,
-        renewRefreshTokens: false, enablePicsCache: false });
-    } catch { this._setStatus({ state: 'error', error: 'steam_client_unavailable' }); throw failure('steam_client_unavailable'); }
+        renewRefreshTokens: true, enablePicsCache: false });
+    } catch { this._fault('steam_client_unavailable'); return; }
     this._client = client;
-    this._session = new AbortController();
-    const current = () => this._client === client && generation === this._generation && !this._session.signal.aborted;
-    const completion = new Promise((resolve, reject) => {
-      const timer = this._clock.setTimeout(() => this._fault('login_timeout'), 120000);
-      this._pendingLogin = { resolve, reject, timer };
+    const current = () => this._client === client && generation === this._generation && !this._closed && !this._session.signal.aborted;
+    this._loginTimer = this._clock.setTimeout(() => {
+      if (current()) this._connectionFailure('login_timeout', 16);
+    }, 120000);
+    client.on('error', error => { if (current()) this._connectionFailure('steam_error', error?.eresult, error?.code); });
+    client.on('disconnected', result => { if (current()) this._connectionFailure('steam_disconnected', result ?? 0); });
+    client.on('refreshToken', token => {
+      if (!current()) return;
+      try {
+        const steamId = refreshTokenIdentity(token, this._clock.now());
+        if (this._auth.steamId && steamId !== this._auth.steamId) throw failure('invalid_steam_session');
+        this._auth.steamId = steamId; this._auth.refreshToken = token;
+        // Upstream may emit this before loggedOn; persist only after identity confirmation.
+        if (this._status.state === 'connected') { this._persistSession(); this._setStatus({ ...this._status }); }
+      } catch {
+        this._forgetReusable(); this._fault('invalid_steam_session');
+      }
     });
-    client.on('error', () => { if (current()) this._fault('steam_error'); });
-    client.on('disconnected', () => { if (current()) this._fault('steam_disconnected'); });
     client.on('playingState', blocked => { if (current() && blocked) this._fault('playing_elsewhere'); });
     client.on('steamGuard', (domain, callback, lastCodeWrong) => {
       if (!current()) return;
       this._guard = { callback, generation };
       const guardPrompt = { kind: domain ? 'email' : 'two_factor', lastCodeWrong: Boolean(lastCodeWrong) };
-      // A mail domain is only a prompt hint; neither codes nor account names are emitted.
+      // The account name is public progress context; codes and tokens never leave this owner.
       if (typeof domain === 'string') guardPrompt.domain = text(domain, 128);
       this._setStatus({ state: 'guard_required', guardPrompt });
       this._emit('steam.guard', guardPrompt);
@@ -125,21 +194,81 @@ export class SteamService {
       }
       const steamId = client.steamID?.getSteamID64?.();
       if (typeof steamId !== 'string' || !/^\d{17}$/.test(steamId)) return this._fault('invalid_steam_identity');
+      if (this._auth.steamId && steamId !== this._auth.steamId) {
+        this._forgetReusable(); return this._fault('invalid_steam_identity');
+      }
       if (client.playingState?.blocked) return this._fault('playing_elsewhere');
+      this._auth.steamId = steamId;
+      this._persistSession();
       this._guard = null;
       const pending = this._pendingLogin;
       this._pendingLogin = null;
-      this._clock.clearTimeout(pending?.timer);
+      this._clock.clearTimeout(this._loginTimer); this._loginTimer = null;
       this._setStatus({ state: 'connected', steamId });
       this._startTimer();
+      this._stableTimer = this._clock.setTimeout(() => { if (current()) this._reconnectAttempts = 0; }, 60000);
+      this._stableTimer?.unref?.();
       pending?.resolve(this.status());
     });
     try {
-      client.logOn({ accountName: accountName.trim(), password, logonID: randomInt(1, 0x7fffffff),
+      client.logOn({ ...credentials, logonID: randomInt(1, 0x7fffffff),
         machineName: 'SteamCuratorHub' });
     } catch { this._fault('login_failed'); }
-    // Secrets remain only in this call and the in-memory upstream authentication implementation.
-    return completion;
+  }
+
+  _sessionError(error) {
+    const code = error?.code ?? error?.message;
+    return SESSION_ERRORS.has(code) ? code : 'steam_session_save_failed';
+  }
+  _persistSession() {
+    const auth = this._auth;
+    if (!auth?.refreshToken) { if (auth) auth.persistence = 'session_only'; return; }
+    try {
+      if (!this._sessionStore) { auth.persistence = 'session_only'; return; }
+      this._sessionStore.writeSteamSession({ accountName: auth.accountName, steamId: auth.steamId, refreshToken: auth.refreshToken });
+      auth.persistence = 'encrypted'; delete auth.persistenceError;
+    } catch (error) { auth.persistence = 'session_only'; auth.persistenceError = this._sessionError(error); }
+  }
+  _forgetReusable() {
+    if (this._auth) { this._auth.refreshToken = null; this._auth.persistence = 'none'; delete this._auth.persistenceError; }
+    try { this._sessionStore?.clearSteamSession(); }
+    catch (error) {
+      if (this._auth) this._auth.persistenceError = this._sessionError(error);
+      return this._sessionError(error);
+    }
+  }
+  _connectionFailure(code, result, networkCode) {
+    if (AUTH_RESULTS.has(result)) {
+      const reusable = Boolean(this._auth?.refreshToken);
+      this._forgetReusable();
+      return this._fault(reusable ? 'steam_auth_required' : 'steam_credentials_rejected');
+    }
+    if (CONFLICT_RESULTS.has(result)) return this._fault('steam_session_conflict');
+    if (this._auth?.refreshToken && (TRANSIENT_RESULTS.has(result) || NETWORK_ERRORS.has(networkCode))) return this._scheduleReconnect(code);
+    this._fault(code);
+  }
+  _scheduleReconnect(code) {
+    if (this._reconnectAttempts >= RECONNECT_DELAYS.length) return this._fault('steam_reconnect_exhausted');
+    const delay = RECONNECT_DELAYS[this._reconnectAttempts++];
+    const client = this._client;
+    this._freezeRuns('unknown', code);
+    const generation = ++this._generation;
+    this._invalidate(code, true);
+    this._client = null;
+    this._session = new AbortController();
+    this._setStatus({ state: 'reconnecting', steamId: this._auth.steamId, attempt: this._reconnectAttempts,
+      maxAttempts: RECONNECT_DELAYS.length, retryAt: new Date(this._clock.now() + delay).toISOString() });
+    this._emitRuns();
+    this._retryTimer = this._clock.setTimeout(() => {
+      this._retryTimer = null;
+      if (generation !== this._generation || this._closed) return;
+      try { refreshTokenIdentity(this._auth.refreshToken, this._clock.now()); }
+      catch { this._forgetReusable(); this._fault('steam_auth_required'); return; }
+      this._connect({ refreshToken: this._auth.refreshToken }, generation).catch(() => {
+        if (generation === this._generation && !this._closed) this._fault('steam_client_unavailable');
+      });
+    }, delay);
+    this._closeClient(client);
   }
 
   submitGuard(code) {
@@ -154,16 +283,21 @@ export class SteamService {
     return this.status();
   }
 
-  _invalidate(code) {
+  _invalidate(code, keepLogin = false) {
     this._session.abort(failure(code));
     this._guard = null;
+    this._clock.clearTimeout(this._loginTimer); this._loginTimer = null;
+    this._clock.clearTimeout(this._retryTimer); this._retryTimer = null;
+    this._clock.clearTimeout(this._stableTimer); this._stableTimer = null;
     this._ownedRequest = null;
     this._clock.clearInterval(this._timer);
     this._timer = null;
     this._nextReadback = Infinity;
-    const pending = this._pendingLogin;
-    this._pendingLogin = null;
-    if (pending) { this._clock.clearTimeout(pending.timer); pending.reject(failure(code)); }
+    if (!keepLogin) {
+      const pending = this._pendingLogin;
+      this._pendingLogin = null;
+      pending?.reject(failure(code));
+    }
   }
 
   async _endClient(client) {
@@ -198,7 +332,7 @@ export class SteamService {
 
   _fault(code, runState = 'unknown') {
     const client = this._client;
-    if (!client || this._closed) return;
+    if (this._closed || (!client && !this._pendingLogin && !['logging_in', 'restoring', 'reconnecting', 'guard_required'].includes(this._status.state))) return;
     this._freezeRuns(runState, code);
     ++this._generation;
     this._invalidate(code);
@@ -208,12 +342,14 @@ export class SteamService {
     this._closeClient(client);
   }
 
-  async logout() {
+  async _disconnect(forgetSession) {
     const client = this._client;
     ++this._generation;
     this._freezeRuns('stopped', 'logout');
     this._invalidate('logged_out');
     this._client = null;
+    const clearError = forgetSession ? this._forgetReusable() : null;
+    this._auth = null;
     this._setStatus({ state: this._closed ? 'closed' : 'logged_out' });
     this._emitRuns();
     const result = await this._closeClient(client);
@@ -223,8 +359,11 @@ export class SteamService {
       }
       this._emitRuns();
     }
+    if (clearError) { this._setStatus({ state: this._closed ? 'closed' : 'logged_out', persistenceError: clearError }); throw failure(clearError); }
     return { ...this.status(), cleanup: result.state };
   }
+
+  logout() { return this._disconnect(true); }
 
   /** Host powerMonitor can call this before OS sleep; there is no automatic resume. */
   suspend(reason = 'system_sleep') { this._fault(reason === 'system_sleep' ? reason : 'session_suspended', 'paused'); return this.status(); }
@@ -233,7 +372,7 @@ export class SteamService {
     if (this._closed) { await this._termination; return this.status(); }
     this._closed = true;
     this._http.abort(failure('service_closed'));
-    await this.logout();
+    await this._disconnect(false);
     return this.status();
   }
 

@@ -41,7 +41,8 @@ export class AppController {
         this.workspace.task(context.task.id).appId !== context.task.appId) throw new Error('operation_context_changed');
   }
   assertNativeAvailable() {
-    if (this.steam.runs().some(run => run.state === 'running') || [...this.inFlight.values()].includes('runs.start')) throw new Error('stop_runs_before_native_stats');
+    const status = this.steam.status();
+    if (status.steamId && status.steamId !== this.workspace.state.activeSteamId) throw new Error('steam_account_mismatch');
     if (this.nativeOperations) throw new Error('native_operation_in_progress');
   }
   async withNative(operation) {
@@ -86,6 +87,7 @@ export class AppController {
         this.workspace.bindAccount(id); this.changed(); return this.snapshot();
       }
       case 'steam.login': return this.steam.login(payload);
+      case 'steam.restore': return this.steam.restore();
       case 'steam.guard': return this.steam.submitGuard(payload.code);
       case 'steam.logout': {
         this.epoch++; for (const request of this.researchRequests.values()) request.abort(); this.previews.clear();
@@ -99,7 +101,6 @@ export class AppController {
       case 'draft.save': { const result = this.workspace.saveDraft(payload); this.changed(); return result; }
       case 'draft.options': { const result = this.workspace.saveDraftOptions(payload); this.changed(); return result; }
       case 'runs.start': {
-        if (this.nativeOperations) throw new Error('native_operation_in_progress');
         const context = this.taskContext(payload.taskId);
         if (this.steam.status().steamId !== context.owner) throw new Error('steam_account_mismatch');
         const result = await this.steam.startRun({ appId: context.task.appId, totalTargetMinutes: context.task.targetMinutes,

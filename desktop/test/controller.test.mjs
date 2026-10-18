@@ -267,24 +267,24 @@ test('maintenance refuses pending run preflight and all-account applying journal
   assert.equal(s.workspace.state.settings.maxSources, 2);
 });
 
-test('pending protocol start reserves the native seam before its asynchronous Steam preflight completes', async () => {
+test('pending protocol preflight allows an independent native read', async () => {
   const s = setup(); const start = deferred(); let nativeReads = 0;
   s.steam.startRun = () => start.promise;
   s.native.read = async () => { nativeReads++; return s.snapshot; };
   const pending = s.controller.invoke('runs.start', { taskId: s.task.id });
-  await assert.rejects(s.controller.invoke('stats.read', { taskId: s.task.id }), /(?:stop_runs_before_native_stats|run_start_in_progress)/);
-  assert.equal(nativeReads, 0);
+  assert.equal((await s.controller.invoke('stats.read', { taskId: s.task.id })).accountId, ACCOUNT);
+  assert.equal(nativeReads, 1);
   start.resolve({ appId: 1001, state: 'running' }); await pending;
 });
 
-test('a pending native read excludes another native worker and a new protocol start', async () => {
+test('a pending native read serializes native workers while allowing a protocol start', async () => {
   const s = setup(); const read = deferred(); let reads = 0; let starts = 0;
   s.native.read = () => { reads++; return read.promise; };
   s.steam.startRun = async () => { starts++; return { state: 'running' }; };
   const pending = s.controller.invoke('stats.read', { taskId: s.task.id });
   await assert.rejects(s.controller.invoke('stats.read', { taskId: s.task.id }), /native_operation_in_progress/);
-  await assert.rejects(s.controller.invoke('runs.start', { taskId: s.task.id }), /native_operation_in_progress/);
-  assert.equal(reads, 1); assert.equal(starts, 0);
+  assert.equal((await s.controller.invoke('runs.start', { taskId: s.task.id })).state, 'running');
+  assert.equal(reads, 1); assert.equal(starts, 1);
   read.resolve(structuredClone(s.snapshot)); await pending;
   assert.equal(s.controller.nativeOperations, 0);
 });

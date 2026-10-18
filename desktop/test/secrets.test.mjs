@@ -29,7 +29,7 @@ test('persisted synthetic credentials are decoded only for the configured AI ori
   assert.equal(s.codec.decrypts.length, decrypts);
   assert.equal(s.store.read('searchKey'), 'fake-search-secret');
   assert.equal(new SecretStore(s.path, s.codec).read('webApiKey'), 'fake-web-secret');
-  assert.deepEqual(s.store.status(), { encryptionAvailable: true, aiKeyConfigured: true, searchKeyConfigured: true, webApiKeyConfigured: true });
+  assert.deepEqual(s.store.status(), { encryptionAvailable: true, aiKeyConfigured: true, searchKeyConfigured: true, webApiKeyConfigured: true, steamSessionConfigured: false });
 });
 
 test('session-only AI replacement removes its persisted predecessor and remains origin-bound only in memory', t => {
@@ -139,4 +139,35 @@ test('corrupt status is nonthrowing, read/patch stay blocked and explicit reset 
     writeFileSync(s.path, invalid); assert.equal(s.store.status().credentialStoreError, 'credential_store_unreadable');
     assert.throws(() => s.store.read('aiKey'), /credential_store_unreadable/);
   }
+});
+
+test('Steam session records are encrypted, exclude passwords/extra fields and never enter rollback files', t => {
+  const s = setup(t), session = { accountName: 'synthetic-account', steamId: '76561198000000000', refreshToken: 'synthetic-refresh-token' };
+  s.store.writeSteamSession({ ...session, password: 'never-save-password', cookies: 'never-save-cookies' });
+  assert.deepEqual(new SecretStore(s.path, s.codec).readSteamSession(), session);
+  for (const value of Object.values(session)) assert.equal(readFileSync(s.path, 'utf8').includes(value), false);
+  assert.equal(s.codec.encrypts.some(value => value.includes('never-save')), false);
+  s.store.write('aiKey', 'synthetic-api-key');
+  assert.deepEqual(s.store.readSteamSession(), session);
+  assert.equal(s.store.status().steamSessionConfigured, true);
+  assert.equal(JSON.parse(readFileSync(`${s.path}.previous`, 'utf8')).steamSession, undefined);
+  s.setAvailable(false); s.store.clearSteamSession();
+  assert.equal(s.store.readSteamSession(), null); assert.equal(s.store.status().steamSessionConfigured, false);
+  for (const file of readdirSync(join(s.path, '..'))) {
+    assert.equal(JSON.parse(readFileSync(join(s.path, '..', file), 'utf8')).steamSession, undefined);
+  }
+  assert.throws(() => s.store.writeSteamSession({ ...session, steamId: 123 }), /invalid_steam_session/);
+});
+
+test('a staged settings patch cannot overwrite a renewed or cleared Steam session', t => {
+  const s = setup(t), session = { accountName: 'synthetic-account', steamId: '76561198000000000', refreshToken: 'synthetic-old-token' };
+  s.store.writeSteamSession(session);
+  for (const replacement of [{ ...session, refreshToken: 'synthetic-renewed-token' }, null]) {
+    const prepared = s.store.preparePatch({ aiKey: 'synthetic-settings-key' });
+    if (replacement) s.store.writeSteamSession(replacement); else s.store.clearSteamSession();
+    assert.throws(() => prepared.commit(), /credential_store_changed_retry/); prepared.cancel();
+    assert.deepEqual(s.store.readSteamSession(), replacement);
+    assert.equal(s.store.read('aiKey'), '');
+  }
+  assert.equal(readdirSync(join(s.path, '..')).some(file => file.includes('.prepared')), false);
 });

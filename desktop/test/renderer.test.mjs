@@ -56,9 +56,10 @@ async function harness({ configure, handlers = {} } = {}) {
   let closeCount = 0; window.close = () => { closeCount++; };
   const calls = [], events = new Set(), timers = fakeTimers();
   let steam = { state: 'connected', steamId: owner, displayName: 'Synthetic account' };
+  let runs = [];
   const emit = event => { for (const listener of events) listener(copy(event)); };
   const changed = () => queueMicrotask(() => emit({ type: 'workspace.changed' }));
-  const snapshot = () => ({ fixture: true, workspace: workspace.snapshot(), steam: copy(steam), runs: [],
+  const snapshot = () => ({ fixture: true, workspace: workspace.snapshot(), steam: copy(steam), runs: copy(runs),
     credentials: { encryptionAvailable: false, aiKeyConfigured: true, searchKeyConfigured: true, webApiKeyConfigured: false } });
   const defaults = async (command, payload) => {
     switch (command) {
@@ -130,6 +131,8 @@ async function harness({ configure, handlers = {} } = {}) {
   async function choose(id) { await input('#task-picker', id, 'change'); }
   async function lang(value) { await input('#language-picker', value, 'change'); }
   return { window, document, workspace, a, b, calls, timers, emit, click, nav, input, choose, lang, findButton,
+    setSteam(value) { steam = copy(value); emit({ type: 'steam.status', data: steam }); },
+    setRuns(value) { runs = copy(value); emit({ type: 'steam.runs', data: runs }); },
     closeCount: () => closeCount, dispose: () => { timers.clear(); events.clear(); } };
 }
 
@@ -508,16 +511,74 @@ test('autosave and close share one drain and persist edits made during an in-fli
   assert.deepEqual(h.calls.filter(c => c.command === 'app.close-ready').map(c => c.payload.allow), [true]);
 });
 
-test('connection and Guard dialogs retain no password in their controls and render prompts as text', async t => {
-  const h = await harness(); t.after(h.dispose);
-  h.emit({ type: 'steam.status', data: { state: 'logged_out' } }); await h.click(h.document.querySelector('#account-button'));
-  assert.equal(h.document.querySelector('#modal').open, true);
+test('one login dialog remains visible from credentials through Guard and success without retaining passwords/codes', async t => {
+  const pending = deferred();
+  const h = await harness({ handlers: { 'steam.login': () => pending.promise } }); t.after(h.dispose);
+  h.setSteam({ state: 'logged_out' }); await h.click(h.document.querySelector('#account-button'));
+  const modal = h.document.querySelector('#modal'); assert.equal(modal.open, true);
+  await h.input('#modal input[autocomplete="username"]', 'synthetic-account');
   const password = h.document.querySelector('#modal input[type="password"]'); password.value = 'synthetic-only-password';
-  await h.click('连接', h.document.querySelector('#modal')); assert.equal(password.value, ''); assert.equal(h.document.querySelector('#modal').open, false);
-  h.emit({ type: 'steam.guard', data: { kind: 'email', domain: '<img onerror=alert(1)>' } });
-  assert.equal(h.document.querySelector('#modal').open, true); assert.equal(h.document.querySelector('#modal img'), null);
-  assert.match(h.document.querySelector('#modal').textContent, /<img onerror=alert\(1\)>/);
-  await h.click('取消登录'); assert.equal(h.document.querySelector('#modal').open, false);
+  await h.click('连接', modal); assert.equal(password.value, ''); assert.equal(modal.open, true);
+  assert.match(modal.textContent, /synthetic-account/); assert.match(modal.textContent, /正在验证登录/);
+  assert.equal(modal.querySelector('input[type="password"]'), null);
+  h.setSteam({ state: 'guard_required', accountName: 'synthetic-account', guardPrompt: { kind: 'email', domain: '<img onerror=alert(1)>', lastCodeWrong: true } });
+  assert.equal(modal.open, true); assert.equal(modal.querySelector('img'), null);
+  assert.match(modal.textContent, /<img onerror=alert\(1\)>/); assert.match(modal.textContent, /上一个验证码无效/);
+  const code = modal.querySelector('input[autocomplete="one-time-code"]'); code.value = '12345'; await h.click('提交验证码');
+  assert.equal(code.value, ''); assert.equal(modal.open, true);
+  h.setSteam({ state: 'logging_in', accountName: 'synthetic-account' }); assert.match(modal.textContent, /正在验证登录/);
+  h.setSteam({ state: 'connected', steamId: owner, accountName: 'synthetic-account', persistence: 'encrypted' });
+  pending.resolve({ state: 'connected' }); await settle(); await settle();
+  assert.equal(modal.open, true); assert.match(modal.textContent, /已连接/); assert.match(modal.textContent, /会话已加密保存/);
+  assert.equal(modal.textContent.includes('synthetic-only-password'), false); assert.equal(modal.textContent.includes('12345'), false);
+});
+
+test('authentication failures remain inline and retryable; restoring/reconnecting progress and cancel stay visible', async t => {
+  const pending = deferred();
+  const h = await harness({ handlers: { 'steam.login': () => pending.promise } }); t.after(h.dispose);
+  h.setSteam({ state: 'logged_out' }); await h.click(h.document.querySelector('#account-button'));
+  await h.input('#modal input[autocomplete="username"]', 'synthetic-account'); await h.click('连接');
+  h.setSteam({ state: 'error', accountName: 'synthetic-account', error: 'steam_credentials_rejected' });
+  pending.reject(new Error('steam_credentials_rejected')); await settle(); await settle();
+  const modal = h.document.querySelector('#modal');
+  assert.equal(modal.open, true); assert.match(modal.textContent, /Steam 拒绝了登录凭据/);
+  assert.equal(modal.querySelector('input[autocomplete="username"]').value, 'synthetic-account');
+  assert.equal(modal.querySelector('input[type="password"]').value, ''); assert.ok(h.findButton('连接', modal));
+  await h.click('关闭', modal);
+  h.setSteam({ state: 'restoring', accountName: 'saved-account' });
+  assert.match(h.document.querySelector('#statusbar').textContent, /saved-account.*正在恢复已保存会话/);
+  await h.click('查看登录进度'); assert.match(modal.textContent, /正在恢复已保存会话/);
+  h.setSteam({ state: 'reconnecting', accountName: 'saved-account', attempt: 2, maxAttempts: 3 });
+  assert.equal(modal.open, true); assert.match(modal.textContent, /自动重连 2 \/ 3/);
+  await h.click('取消登录'); assert.equal(modal.open, true); assert.ok(h.findButton('连接', modal));
+});
+
+test('a post-login library failure preserves successful authentication feedback', async t => {
+  let failed = false;
+  const h = await harness({ handlers: {
+    'steam.login': () => { h.setSteam({ state: 'connected', accountName: 'synthetic-account', steamId: owner, persistence: 'encrypted' }); failed = true; return { state: 'connected' }; },
+    'steam.library': (payload, context) => { if (failed) throw new Error('steam_library_failed'); return context.defaults('steam.library', payload); }
+  } }); t.after(h.dispose);
+  h.setSteam({ state: 'logged_out' }); await h.click(h.document.querySelector('#account-button')); await h.click('连接');
+  await settle(); await settle();
+  const modal = h.document.querySelector('#modal');
+  assert.match(modal.textContent, /已连接/); assert.match(modal.textContent, /会话已加密保存/);
+  assert.doesNotMatch(modal.textContent, /Steam 连接未完成/);
+  assert.ok(h.findButton('退出连接并停止运行', modal));
+});
+
+test('achievement read/preview/apply controls remain usable while the same AppID is running', async t => {
+  const h = await harness(); t.after(h.dispose);
+  h.setRuns([{ id: 'running', appId: h.a.appId, steamId: owner, state: 'running' }]);
+  await h.nav('achievements');
+  assert.doesNotMatch(h.document.querySelector('#main').textContent, /请先停止协议运行/);
+  await h.click('读取 / 刷新 Steam 状态');
+  const checkbox = h.document.querySelector('#achievement-table input[type="checkbox"]'); checkbox.checked = true;
+  checkbox.dispatchEvent(new h.window.Event('change', { bubbles: true }));
+  await h.click('预览成就与统计更改');
+  await h.click('提交合成更改');
+  assert.deepEqual(h.calls.filter(call => /^stats\./.test(call.command)).map(call => call.command), ['stats.read', 'stats.preview', 'stats.apply']);
+  assert.equal(h.calls.some(call => call.command === 'runs.stop'), false);
 });
 
 test('damaged credentials leave offline work usable and recovery requires an explicit settings action',async t=>{
