@@ -446,12 +446,13 @@ export class SteamService {
         if (run.state === 'running') missingActive = true;
         continue;
       }
+      const regressed = value < run.steamMinutes || value < run.baselineSteamMinutes;
       run.steamMinutes = value;
       run.lastReadbackAt = new Date(this._clock.now()).toISOString();
-      run.readbackStatus = value < run.baselineSteamMinutes ? 'inconsistent' : value > run.baselineSteamMinutes ?
+      run.readbackStatus = regressed ? 'inconsistent' : value > run.baselineSteamMinutes ?
         'increase_observed' : 'no_increase_observed';
       if (run.state === 'running' && run.totalTargetMinutes !== null && value >= run.totalTargetMinutes) reached.push(run.appId);
-      if (run.state === 'running' && value < run.baselineSteamMinutes) missingActive = true;
+      if (run.state === 'running' && regressed) missingActive = true;
     }
     if (missingActive) { this._fault('steam_readback_unavailable'); return; }
     if (reached.length) this._stopIds(reached, 'total_target_reached');
