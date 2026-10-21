@@ -1,0 +1,155 @@
+<!-- Throwaway #13 prototype: three independent workspace structures; synthetic in-memory data only. -->
+<style>
+  #sch-ux-prototype { color-scheme: light dark; font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: light-dark(#242529, #e7e7e9); --sch-bg: light-dark(#ffffff, #202124); --sch-soft: light-dark(#f4f4f5, #292b2f); --sch-line: light-dark(#d9dadd, #46484c); --sch-muted: light-dark(#62656d, #b4b7bd); --sch-ink: light-dark(#242529, #e7e7e9); --sch-selected: light-dark(#e4e5e7, #42454b); --sch-warning: light-dark(#725315, #efd395); }
+  #sch-ux-prototype * { box-sizing: border-box; }
+  #sch-ux-prototype [hidden] { display: none !important; }
+  #sch-ux-prototype .sch-window { background: var(--sch-bg); border: 1px solid var(--sch-line); border-radius: 10px; overflow: hidden; min-height: 660px; }
+  #sch-ux-prototype .sch-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid var(--sch-line); padding: 12px 18px; padding-right: 100px; }
+  #sch-ux-prototype .sch-title { font-weight: 500; }
+  #sch-ux-prototype .sch-grow { flex: 1; }
+  #sch-ux-prototype .sch-small { font-size: 12px; color: var(--sch-muted); }
+  #sch-ux-prototype .sch-muted { color: var(--sch-muted); }
+  #sch-ux-prototype button, #sch-ux-prototype select, #sch-ux-prototype input, #sch-ux-prototype textarea { font: inherit; color: inherit; background: var(--sch-bg); border: 1px solid var(--sch-line); border-radius: 5px; padding: 6px 10px; max-width: 100%; }
+  #sch-ux-prototype button:disabled { opacity: .5; }
+  #sch-ux-prototype button.sch-primary { color: var(--sch-bg); background: var(--sch-ink); border-color: var(--sch-ink); }
+  #sch-ux-prototype button[aria-pressed="true"], #sch-ux-prototype button[aria-selected="true"] { background: var(--sch-selected); }
+  #sch-ux-prototype h2 { font-size: 21px; line-height: 1.35; font-weight: 500; margin: 0 0 7px; }
+  #sch-ux-prototype h3 { font-size: 15px; font-weight: 500; margin: 0 0 8px; }
+  #sch-ux-prototype p { margin: 0 0 10px; }
+  #sch-ux-prototype .sch-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  #sch-ux-prototype .sch-stack > * + * { margin-top: 14px; }
+  #sch-ux-prototype .sch-content { padding: 20px; min-width: 0; }
+  #sch-ux-prototype .sch-side { width: 205px; flex-shrink: 0; padding: 16px 12px; background: var(--sch-soft); border-right: 1px solid var(--sch-line); }
+  #sch-ux-prototype .sch-side button { text-align: left; width: 100%; margin-bottom: 8px; }
+  #sch-ux-prototype .sch-main { display: flex; min-height: 486px; }
+  #sch-ux-prototype .sch-divider { border-top: 1px solid var(--sch-line); padding-top: 16px; margin-top: 16px; }
+  #sch-ux-prototype .sch-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin: 18px 0; border-bottom: 1px solid var(--sch-line); padding-bottom: 8px; }
+  #sch-ux-prototype .sch-tabs button { border-color: transparent; }
+  #sch-ux-prototype .sch-two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  #sch-ux-prototype .sch-note { color: var(--sch-warning); border-left: 3px solid var(--sch-line); padding-left: 10px; }
+  #sch-ux-prototype .sch-tray { border-top: 1px solid var(--sch-line); background: var(--sch-soft); padding: 12px 18px; }
+  #sch-ux-prototype .sch-tray-game { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 7px; }
+  #sch-ux-prototype .sch-tray-game strong { min-width: 90px; font-weight: 500; }
+  #sch-ux-prototype .sch-tray-game button { padding: 3px 9px; }
+  #sch-ux-prototype .sch-frame { border: 1px solid var(--sch-line); padding: 14px; border-radius: 5px; }
+  #sch-ux-prototype .sch-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 20px; }
+  #sch-ux-prototype .sch-column { background: var(--sch-soft); padding: 12px; min-height: 150px; }
+  #sch-ux-prototype .sch-ticket { display: block; width: 100%; text-align: left; margin-top: 12px; }
+  #sch-ux-prototype .sch-ticket span { display: block; }
+  #sch-ux-prototype .sch-drawer { margin: 0 20px 20px; border: 1px solid var(--sch-line); padding: 16px; }
+  #sch-ux-prototype textarea { width: 100%; min-height: 130px; resize: vertical; }
+  #sch-ux-prototype label { display: block; }
+  #sch-ux-prototype table { border-collapse: collapse; width: 100%; }
+  #sch-ux-prototype td, #sch-ux-prototype th { border-bottom: 1px solid var(--sch-line); text-align: left; padding: 9px 6px; font-weight: 400; vertical-align: top; }
+  #sch-ux-prototype th { color: var(--sch-muted); font-size: 12px; }
+  #sch-ux-prototype .sch-inline { display: inline-flex; align-items: center; gap: 7px; }
+  #sch-ux-prototype .sch-inline input { margin: 0; }
+  #sch-ux-prototype .sch-banner { margin: 0; padding: 10px 18px; border-bottom: 1px solid var(--sch-line); background: var(--sch-soft); }
+  #sch-ux-prototype .sch-account { margin: 12px 18px; padding: 14px; border: 1px solid var(--sch-line); }
+  #sch-ux-prototype .sch-state { min-height: 34px; padding: 8px 18px; border-top: 1px solid var(--sch-line); color: var(--sch-muted); font-size: 12px; }
+  #sch-ux-prototype .sch-steps { display: flex; flex-wrap: wrap; gap: 18px; border-bottom: 1px solid var(--sch-line); padding-bottom: 12px; margin-bottom: 16px; }
+  #sch-ux-prototype .sch-batch { background: var(--sch-soft); padding: 10px 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { #sch-ux-prototype .sch-side { width: 165px; } #sch-ux-prototype .sch-two { grid-template-columns: 1fr; } #sch-ux-prototype .sch-board { grid-template-columns: 1fr; } #sch-ux-prototype .sch-window { min-height: 900px; } }
+  @media (max-width: 520px) { #sch-ux-prototype .sch-main { display: block; } #sch-ux-prototype .sch-side { width: auto; border-right: 0; border-bottom: 1px solid var(--sch-line); } #sch-ux-prototype .sch-side button { width: auto; margin-right: 6px; } #sch-ux-prototype .sch-content { padding: 14px; } #sch-ux-prototype .sch-top { padding-right: 18px; padding-top: 50px; } #sch-ux-prototype table, #sch-ux-prototype tbody, #sch-ux-prototype tr, #sch-ux-prototype td { display: block; } #sch-ux-prototype thead { display: none; } #sch-ux-prototype td { border: 0; padding: 4px 0; } #sch-ux-prototype tr { border-bottom: 1px solid var(--sch-line); padding: 8px 0; } }
+  @media (pointer: coarse) { #sch-ux-prototype button { min-height: 44px; } }
+</style>
+<div id="sch-ux-prototype" aria-label="Steam Curator Hub 工作流与状态">
+  <div class="viz-carousel" aria-label="Steam Curator Hub 低保真工作流方案" data-previous-label="上一个方案" data-next-label="下一个方案">
+    <section data-variant="游戏工作台" aria-label="以单款游戏为上下文的工作台"><div class="sch-window" data-layout="workspace"></div></section>
+    <section data-variant="评测任务看板" aria-label="以评测进度为入口的看板" hidden><div class="sch-window" data-layout="board"></div></section>
+    <section data-variant="多游戏操作表" aria-label="以批量运行和成就管理为入口的表格" hidden><div class="sch-window" data-layout="table"></div></section>
+  </div>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('sch-ux-prototype');
+  const games = [
+    { id: 'voyage', title: '星海旅人', appId: 1001, group: '探索游戏鉴赏组', minutes: 180, target: 240, phase: '撰写中', initial: '探索的节奏舒缓，叙事线索藏在地图的细节里。' },
+    { id: 'clockwork', title: '发条工坊', appId: 1002, group: '独立游戏鉴赏组', minutes: 65, target: 120, phase: '待研究', initial: '这里保留发条工坊自己的评测草稿。' },
+    { id: 'nightline', title: '夜航信号', appId: 1003, group: '探索游戏鉴赏组', minutes: 250, target: null, phase: '待发布', initial: '由短章节组成的悬疑故事，适合连续阅读。' }
+  ];
+  const scene = { connection: 'connected', writeResult: 'complete', details: true };
+  const connectionLabels = { connected: '已连接 · 会话已保存', guard: '等待 Steam Guard', reconnecting: '重连 1 / 3 · 运行已中断', error: '会话失效 · 需要重新登录' };
+  const states = new Map();
+  const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const action = (name, label, attrs = '') => `<button type="button" ${attrs.includes('class=') ? '' : 'class="cursor-interaction"'} data-action="${name}" ${attrs}>${label}</button>`;
+  const primary = (name, label, attrs = '') => `<button type="button" class="sch-primary cursor-interaction" data-action="${name}" ${attrs}>${label}</button>`;
+  const selected = state => games.find(game => game.id === state.game);
+  const running = state => scene.connection === 'connected' ? [...state.running] : [];
+  const header = state => `<header class="sch-top"><span class="sch-title">Steam Curator Hub</span><span class="sch-small">交互草图 · 全部为示例</span><span class="sch-grow"></span>${action('account', '演示账号 · ' + connectionLabels[scene.connection])}${action('settings', '设置')}</header>${scene.connection === 'connected' ? '' : `<p class="sch-banner" role="status">${connectionLabels[scene.connection]}。草稿保留，恢复连接后需手动启动运行。</p>`}${state.account ? `<section class="sch-account"><h3>账号与连接</h3><p>${connectionLabels[scene.connection]}</p><p class="sch-small">账号名和当前阶段留在同一处；验证失败时在这里重试。</p>${action('reconnect', scene.connection === 'guard' ? '演示：完成 Guard' : '演示：恢复连接')}${action('account', '收起')}</section>` : ''}`;
+  const tabs = state => `<div class="sch-tabs" role="group" aria-label="${selected(state).title}的功能">${[['overview', '概览与运行'], ['achievements', '成就 / 统计'], ['writing', '研究与写作'], ['publication', '发布准备']].map(([id, title]) => action('tab', title, `data-tab="${id}" aria-pressed="${state.tab === id}"`)).join('')}</div>`;
+  const gameHeader = state => { const g = selected(state); return `<div class="sch-row"><div><h2>${g.title}</h2><p class="sch-small">AppID ${g.appId} · ${g.group}</p></div><span class="sch-grow"></span><span>${g.phase}</span></div>`; };
+  const tray = state => `<footer class="sch-tray"><div class="sch-row"><span class="sch-title">并行运行 · ${running(state).length} 款</span><span class="sch-small">切换游戏、写作或修改成就时一直可见</span></div>${games.filter(g => state.running.has(g.id) || state.paused.has(g.id)).map(g => `<div class="sch-tray-game"><strong>${g.title}</strong><span>${running(state).includes(g.id) ? '运行请求中' : '结果未知 · 已中断'}</span>${scene.details ? `<span class="sch-small">Steam 上次读回 ${g.minutes} 分钟 · 本机本次 15 分钟</span>` : ''}<span class="sch-grow"></span>${action('game-stats', '查看成就', `data-game="${g.id}"`)}${action(running(state).includes(g.id) ? 'stop' : 'start', running(state).includes(g.id) ? '单独停止' : '手动重新启动', `data-game="${g.id}" ${scene.connection !== 'connected' ? 'disabled' : ''}`)}</div>`).join('') || '<p class="sch-small">没有运行中的游戏；按每款游戏手动启动。</p>'}</footer>`;
+  function overview(state) {
+    const g = selected(state), active = running(state).includes(g.id);
+    return `<div class="sch-two"><section><h3>这款游戏的运行</h3><p>Steam 上次读回：${g.minutes} 分钟</p><p>累计目标：${g.target ? g.target + ' 分钟' : '未设置'}</p><label>本次结束条件 <select aria-label="本次结束条件"><option>30 分钟后停止</option><option>1 小时后停止</option><option>不设置期限</option></select></label><div class="sch-row sch-divider">${primary(active ? 'stop' : 'start', active ? '停止这款游戏' : '启动这款游戏', `data-game="${g.id}" ${scene.connection !== 'connected' ? 'disabled' : ''}`)}${action('tab', '同时管理成就', 'data-tab="achievements"')}</div></section><section><h3>评测工作</h3><p>唯一投稿群组：${g.group}</p><p>草稿、资料和发布结果始终绑定 ${g.title}。</p>${primary('tab', '继续研究与写作', 'data-tab="writing"')}<p class="sch-small sch-divider">开始或停止运行不会改变评测进度。写作无需等待时长完成。</p></section></div>`;
+  }
+  function achievements(state) {
+    const g = selected(state), native = state.native[g.id];
+    return `<section><div class="sch-row"><h3>成就与统计 · ${g.title}</h3><span class="sch-grow"></span><span class="sch-small">${running(state).includes(g.id) ? '本游戏仍在运行' : '本游戏未运行'} · 操作不停止其他游戏</span></div>${native.unknown ? `<p class="sch-note" role="alert">上次写入结果未知。先重新读取并核对，再决定是否发起新操作。</p>${action('acknowledge', '演示：重新读取并确认已核对')}` : `<table><thead><tr><th>示例选择</th><th>项目</th><th>原值</th><th>新值</th></tr></thead><tbody><tr><td>已选成就</td><td>启程</td><td>${native.unlocked ? '已解锁' : '未解锁'}</td><td>${native.unlocked ? '重新锁定' : '解锁'}</td></tr><tr><td>已选统计</td><td>探索次数 · INT</td><td>${native.unlocked ? '4' : '3'}</td><td>${native.unlocked ? '3' : '4'}</td></tr></tbody></table><div class="sch-row sch-divider">${primary('preview', '预览示例更改')}${action('read', '重新读取')}</div>`}${state.confirm ? `<div class="sch-frame sch-divider"><h3>确认本次更改 · ${g.title}</h3><p>启程：${native.unlocked ? '已解锁 → 未解锁' : '未解锁 → 已解锁'}；探索次数：${native.unlocked ? '4 → 3' : '3 → 4'}</p><p class="sch-small">当前是固定示例选择；正式界面还需确认单项和批量选择的操作。</p><div class="sch-row">${primary('apply', '确认演示写入')}${action('cancel-preview', '返回修改')}</div></div>` : ''}${native.message ? `<p role="status" class="sch-divider">${escape(native.message)}</p>` : ''}</section>`;
+  }
+  function writing(state) {
+    const g = selected(state);
+    return `<section><div class="sch-row"><h3>${g.title} · 研究与写作</h3><span class="sch-grow"></span><select aria-label="文章语言"><option>简体中文</option><option>English</option></select></div><div class="sch-two"><section><h3>资料与 AI 建议</h3><p class="sch-small">Steam 评论 · 示例媒体摘录 · 来源单独保留</p><p>示例观点：探索奖励和剧情的连接清晰，后段节奏较慢。</p>${action('research', state.researched ? '重新生成建议' : '演示：整理资料并生成建议')}${state.researched ? `<div class="sch-frame sch-divider"><p>建议稿：以舒缓探索串起故事，后段推进稍显重复。</p>${action('use-suggestion', '应用到这款游戏的草稿')}</div>` : ''}</section><section><label>作者长评 · ${g.title}<textarea data-draft="long" aria-label="${g.title}作者长评">${escape(state.drafts[g.id])}</textarea></label><p class="sch-small" data-save-label>草稿仅保存在这次草图中；切换游戏可找回各自内容。</p>${action('tab', '检查长短评与发布目标', 'data-tab="publication"')}</section></div></section>`;
+  }
+  function publication(state) {
+    const g = selected(state);
+    return `<section><h3>发布准备 · ${g.title}</h3><div class="sch-steps"><span>核对目标</span><span>预览长短评</span><span>前往 Steam 本人提交</span></div><div class="sch-two"><section><h3>个人长评</h3><p>${escape(state.drafts[g.id])}</p><p class="sch-small">预览包含 ${g.group} 的尾巴。</p>${action('prepare-long', '准备长评')}</section><section><h3>鉴赏家短评</h3><label>正文<textarea aria-label="鉴赏家短评">探索与叙事相互呼应，适合喜欢慢节奏发现的玩家。</textarea></label><label>全文链接（独立字段）<input type="text" placeholder="个人长评发布后填写" aria-label="全文链接"></label><p class="sch-small">少于 200 字 · 不拼接尾巴或链接</p>${action('prepare-short', '准备短评')}</section></div>${state.publication ? `<div class="sch-frame sch-divider"><p>${state.publication === 'long' ? '长评' : '短评'}已冻结 · 演示账号 / ${g.title} / ${g.group}</p><p>下一步在 Steam 核对并由本人提交；长短评分别记录结果。</p><p class="sch-small">草图没有打开 Steam，也没有发布任何内容。</p></div>` : ''}</section>`;
+  }
+  function panel(state) { return ({ overview, achievements, writing, publication })[state.tab](state); }
+  function render(windowEl, state) {
+    let middle;
+    if (state.layout === 'workspace') {
+      middle = `<div class="sch-main"><aside class="sch-side"><h3>我的游戏</h3>${action('search', '查找 / 添加游戏')}${games.map(g => action('game', `${g.title}<br><span class="sch-small">${g.phase} · ${g.group}</span>`, `data-game="${g.id}" aria-pressed="${g.id === state.game}"`)).join('')}</aside><main class="sch-content sch-grow">${gameHeader(state)}${tabs(state)}${panel(state)}</main></div>`;
+    } else if (state.layout === 'board') {
+      middle = `<div class="sch-content"><div class="sch-row"><h2>评测任务</h2><span class="sch-grow"></span>${action('search', '查找游戏并建任务')}</div><p class="sch-small">先找要完成的评测，再在任务里处理运行、成就和写作。</p></div><div class="sch-board">${['待研究', '撰写中', '待发布'].map(phase => `<section class="sch-column"><h3>${phase}</h3>${games.filter(g => g.phase === phase).map(g => action('game', `${g.title}<span class="sch-small">${g.group}</span><span class="sch-small">Steam 上次 ${g.minutes} 分钟</span>`, `class="sch-ticket cursor-interaction" data-game="${g.id}" aria-pressed="${state.game === g.id}"`)).join('')}</section>`).join('')}</div><main class="sch-drawer">${gameHeader(state)}${tabs(state)}${panel(state)}</main>`;
+    } else {
+      middle = `<main class="sch-content"><div class="sch-row"><h2>游戏操作台</h2><span class="sch-grow"></span>${action('search', '查找 / 添加游戏')}</div><p class="sch-small">先查看多款游戏的运行和时长，选中一款后在表格下方管理成就或评测。</p><table><thead><tr><th>游戏 / 群组</th><th>运行</th><th>Steam 总分钟</th><th>累计目标</th><th>操作</th></tr></thead><tbody>${games.map(g => `<tr><td>${action('game', g.title, `data-game="${g.id}" aria-pressed="${state.game === g.id}"`)}<div class="sch-small">${g.group}</div></td><td>${running(state).includes(g.id) ? '运行请求中' : scene.connection === 'connected' ? '未运行' : '结果未知'}</td><td>${g.minutes}</td><td>${g.target ?? '未设'}</td><td>${action(running(state).includes(g.id) ? 'stop' : 'start', running(state).includes(g.id) ? '单独停止' : '启动', `data-game="${g.id}" ${scene.connection !== 'connected' ? 'disabled' : ''}`)}</td></tr>`).join('')}</tbody></table><section class="sch-divider">${gameHeader(state)}${tabs(state)}${panel(state)}</section></main>`;
+    }
+    windowEl.innerHTML = header(state) + (state.search ? `<section class="sch-account"><h3>查找游戏</h3><label>游戏名称或 AppID<input aria-label="游戏名称或 AppID" placeholder="例如：星海旅人"></label><p class="sch-small">浏览搜索结果保留当前编辑上下文：${selected(state).title}。</p>${games.map(g => action('open-game', `进入 ${g.title} 的工作台`, `data-game="${g.id}"`)).join(' ')}${action('search', '收起查找')}</section>` : '') + (state.settings ? `<section class="sch-account"><h3>设置与凭据</h3><p>Gemini、搜索与投稿群组在这里统一配置；离线写作随时可用。</p><p class="sch-small">草图不收集或保存密钥。</p>${action('settings', '收起设置')}</section>` : '') + middle + tray(state) + `<div class="sch-state" role="status" aria-live="polite">当前：${selected(state).title} / ${state.tab === 'overview' ? '概览与运行' : state.tab === 'achievements' ? '成就与统计' : state.tab === 'writing' ? '研究与写作' : '发布准备'} · ${running(state).length} 款并行 · ${state.native[state.game].unknown ? '写入结果未知' : '没有待确认写入'}</div>`;
+  }
+  const persist = state => { if (window.openai?.setWidgetState) window.openai.setWidgetState({ modelContent: { prototype: 'SteamCuratorHub #13', layout: state.layout, game: selected(state).title, section: state.tab }, privateContent: null }).catch(() => {}); };
+  for (const windowEl of root.querySelectorAll('[data-layout]')) {
+    const state = { layout: windowEl.dataset.layout, game: 'voyage', tab: 'overview', running: new Set(['voyage', 'clockwork']), paused: new Set(), drafts: Object.fromEntries(games.map(g => [g.id, g.initial])), native: Object.fromEntries(games.map(g => [g.id, { unknown: false, unlocked: false, message: '' }])), account: false, search: false, settings: false, confirm: false, researched: false, publication: null };
+    states.set(windowEl, state); render(windowEl, state);
+    windowEl.addEventListener('input', event => {
+      if (event.target.matches('[data-draft]')) { state.drafts[state.game] = event.target.value; windowEl.querySelector('[data-save-label]').textContent = `已保留本次草图中 ${selected(state).title} 的修改`; }
+    });
+    windowEl.addEventListener('click', event => {
+      const button = event.target.closest('button[data-action]');
+      if (!button || button.disabled) return;
+      const act = button.dataset.action;
+      if (act === 'game' || act === 'game-stats' || act === 'open-game') { state.game = button.dataset.game; state.confirm = false; state.publication = null; state.researched = false; if (act === 'game-stats') state.tab = 'achievements'; if (act === 'open-game') state.search = false; }
+      if (act === 'tab') { state.tab = button.dataset.tab; state.confirm = false; }
+      const native = state.native[state.game];
+      if (act === 'account') state.account = !state.account;
+      if (act === 'settings') state.settings = !state.settings;
+      if (act === 'search') state.search = !state.search;
+      if (act === 'reconnect') { scene.connection = 'connected'; for (const s of states.values()) s.running.clear(); }
+      if (act === 'stop') { state.running.delete(button.dataset.game); state.paused.delete(button.dataset.game); }
+      if (act === 'start') { state.running.add(button.dataset.game); state.paused.delete(button.dataset.game); }
+      if (act === 'preview') state.confirm = true;
+      if (act === 'cancel-preview') state.confirm = false;
+      if (act === 'apply') { state.confirm = false; native.unknown = scene.writeResult === 'unknown'; if (!native.unknown) native.unlocked = !native.unlocked; native.message = native.unknown ? '演示：未收到可确认的结果，运行集合保持不变。' : '演示更改完成；其他游戏继续运行。真实 Steam 写入仍待本人验收。'; }
+      if (act === 'acknowledge') { native.unknown = false; native.message = '演示：已重新读取并人工核对；没有自动重试上次写入。'; }
+      if (act === 'read') native.message = '演示数据已重新读取；运行集合保持不变。';
+      if (act === 'research') state.researched = true;
+      if (act === 'use-suggestion') state.drafts[state.game] = '以舒缓探索串起故事，后段推进稍显重复。';
+      if (act === 'prepare-long' || act === 'prepare-short') state.publication = act === 'prepare-long' ? 'long' : 'short';
+      for (const [element, s] of states) render(element, s);
+      persist(state);
+    });
+  }
+  function applyScene() { for (const [element, state] of states) { if (scene.connection !== 'connected') { for (const id of state.running) state.paused.add(id); state.running.clear(); state.confirm = false; } render(element, state); } }
+  root.addEventListener('sch-prototype-scene', event => { if (connectionLabels[event.detail?.connection]) scene.connection = event.detail.connection; if (['complete', 'unknown'].includes(event.detail?.writeResult)) scene.writeResult = event.detail.writeResult; applyScene(); });
+  const saved = window.openai?.widgetState?.modelContent;
+  if (saved?.prototype === 'SteamCuratorHub #13') for (const [element, state] of states) if (state.layout === saved.layout && ['overview', 'achievements', 'writing', 'publication'].includes(saved.section)) { state.tab = saved.section; render(element, state); }
+  window.addEventListener('openai:set_globals', event => { const savedState = event.detail?.globals?.widgetState?.modelContent; if (savedState?.prototype === 'SteamCuratorHub #13') for (const [element, state] of states) if (state.layout === savedState.layout && ['overview', 'achievements', 'writing', 'publication'].includes(savedState.section)) { state.tab = savedState.section; render(element, state); } });
+  if (globalThis.Tweak) {
+    const tweak = new Tweak({ container: root, onChange: applyScene });
+    tweak.addSelect(scene, 'connection', { label: '连接场景', options: [{ label: '已连接', value: 'connected' }, { label: '等待 Guard', value: 'guard' }, { label: '断线重连', value: 'reconnecting' }, { label: '会话失效', value: 'error' }] });
+    tweak.addSelect(scene, 'writeResult', { label: '演示写入结果', options: [{ label: '完成', value: 'complete' }, { label: '结果未知', value: 'unknown' }] });
+    tweak.addToggle(scene, 'details', { label: '显示两种时长的详情' });
+  }
+})();
+</script>

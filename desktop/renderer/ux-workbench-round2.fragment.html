@@ -1,0 +1,164 @@
+<!-- Disposable #13 round two: compare always-visible sources with writing-first disclosure. Synthetic data only. -->
+<style>
+  #sch-writing-round2 { color-scheme: light dark; font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: light-dark(#242529, #e7e7e9); --sch2-bg: light-dark(#fff, #202124); --sch2-soft: light-dark(#f4f4f5, #2a2c30); --sch2-line: light-dark(#d7d9de, #494c52); --sch2-text: light-dark(#242529, #e7e7e9); --sch2-muted: light-dark(#62656d, #b9bcc3); --sch2-picked: light-dark(#e4e6e9, #42464d); --sch2-warn: light-dark(#77530e, #f1cf86); }
+  #sch-writing-round2 * { box-sizing: border-box; }
+  #sch-writing-round2 [hidden] { display: none !important; }
+  #sch-writing-round2 .wb-window { background: var(--sch2-bg); border: 1px solid var(--sch2-line); border-radius: 10px; min-height: 780px; overflow: hidden; }
+  #sch-writing-round2 .wb-top { padding: 12px 100px 12px 16px; border-bottom: 1px solid var(--sch2-line); display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+  #sch-writing-round2 .wb-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  #sch-writing-round2 .wb-grow { flex: 1; min-width: 0; }
+  #sch-writing-round2 .wb-small { color: var(--sch2-muted); font-size: 12px; }
+  #sch-writing-round2 .wb-strong { font-weight: 500; }
+  #sch-writing-round2 h2 { font-size: 21px; line-height: 1.4; font-weight: 500; margin: 0 0 5px; }
+  #sch-writing-round2 h3 { font-size: 15px; font-weight: 500; margin: 0 0 10px; }
+  #sch-writing-round2 p { margin: 0 0 10px; }
+  #sch-writing-round2 button, #sch-writing-round2 select, #sch-writing-round2 input, #sch-writing-round2 textarea { font: inherit; color: inherit; border: 1px solid var(--sch2-line); border-radius: 5px; padding: 6px 9px; background: var(--sch2-bg); max-width: 100%; }
+  #sch-writing-round2 button:disabled { opacity: .5; }
+  #sch-writing-round2 button[aria-pressed="true"] { background: var(--sch2-picked); }
+  #sch-writing-round2 .wb-primary { background: var(--sch2-text); color: var(--sch2-bg); border-color: var(--sch2-text); }
+  #sch-writing-round2 .wb-body { display: grid; grid-template-columns: 165px minmax(0, 1fr); }
+  #sch-writing-round2 .wb-games { background: var(--sch2-soft); border-right: 1px solid var(--sch2-line); padding: 16px 11px; }
+  #sch-writing-round2 .wb-game { display: block; text-align: left; width: 100%; margin: 0 0 9px; }
+  #sch-writing-round2 .wb-game span { display: block; }
+  #sch-writing-round2 .wb-main { padding: 18px; min-width: 0; }
+  #sch-writing-round2 .wb-tabs { display: flex; gap: 5px; flex-wrap: wrap; border-bottom: 1px solid var(--sch2-line); padding: 8px 0 10px; margin: 8px 0 16px; }
+  #sch-writing-round2 .wb-tabs button { border-color: transparent; }
+  #sch-writing-round2 .wb-editor-grid { display: grid; grid-template-columns: minmax(220px, .9fr) minmax(0, 1.5fr); gap: 20px; }
+  #sch-writing-round2 .wb-editor-grid.wb-focus { grid-template-columns: minmax(0, 1fr); }
+  #sch-writing-round2 .wb-editor-grid.wb-focus.wb-open { grid-template-columns: minmax(0, 1.5fr) minmax(220px, .9fr); }
+  #sch-writing-round2 .wb-focus .wb-sources { order: 2; }
+  #sch-writing-round2 .wb-sources { border-right: 1px solid var(--sch2-line); padding-right: 16px; min-width: 0; }
+  #sch-writing-round2 .wb-focus .wb-sources { border-right: 0; padding-right: 0; border-left: 1px solid var(--sch2-line); padding-left: 16px; }
+  #sch-writing-round2 .wb-source-list { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
+  #sch-writing-round2 .wb-source-text { padding: 12px; background: var(--sch2-soft); border-radius: 4px; margin-bottom: 14px; }
+  #sch-writing-round2 .wb-note { border-left: 3px solid var(--sch2-line); padding-left: 10px; color: var(--sch2-warn); }
+  #sch-writing-round2 .wb-rule { border-top: 1px solid var(--sch2-line); padding-top: 14px; margin-top: 16px; }
+  #sch-writing-round2 .wb-author { min-width: 0; }
+  #sch-writing-round2 .wb-author textarea { display: block; margin-top: 9px; width: 100%; min-height: 255px; resize: vertical; }
+  #sch-writing-round2 .wb-author input { width: 100%; margin-top: 8px; }
+  #sch-writing-round2 .wb-draft-meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  #sch-writing-round2 .wb-compare { margin-top: 16px; border: 1px solid var(--sch2-line); border-radius: 5px; padding: 14px; }
+  #sch-writing-round2 .wb-compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 10px 0 14px; }
+  #sch-writing-round2 .wb-compare p { white-space: pre-wrap; overflow-wrap: anywhere; }
+  #sch-writing-round2 .wb-tray { padding: 12px 16px; background: var(--sch2-soft); border-top: 1px solid var(--sch2-line); }
+  #sch-writing-round2 .wb-run { display: inline-flex; align-items: center; gap: 7px; padding: 5px 0; margin-right: 16px; flex-wrap: wrap; }
+  #sch-writing-round2 .wb-state { border-top: 1px solid var(--sch2-line); padding: 8px 16px; font-size: 12px; color: var(--sch2-muted); }
+  #sch-writing-round2 .wb-history { white-space: pre-wrap; overflow-wrap: anywhere; }
+  #sch-writing-round2 .wb-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  #sch-writing-round2 .wb-form label { display: grid; gap: 7px; }
+  @media (max-width: 850px) { #sch-writing-round2 .wb-body { grid-template-columns: 145px minmax(0, 1fr); } #sch-writing-round2 .wb-editor-grid, #sch-writing-round2 .wb-editor-grid.wb-focus.wb-open { grid-template-columns: 1fr; } #sch-writing-round2 .wb-sources, #sch-writing-round2 .wb-focus .wb-sources { order: 0; padding: 0 0 14px; border: 0; border-bottom: 1px solid var(--sch2-line); } #sch-writing-round2 .wb-window { min-height: 1080px; } }
+  @media (max-width: 520px) { #sch-writing-round2 .wb-body { grid-template-columns: 1fr; } #sch-writing-round2 .wb-games { border-right: 0; border-bottom: 1px solid var(--sch2-line); } #sch-writing-round2 .wb-game { display: inline-block; width: auto; margin-right: 5px; } #sch-writing-round2 .wb-top { padding-right: 16px; padding-top: 48px; } #sch-writing-round2 .wb-main { padding: 14px; } #sch-writing-round2 .wb-form, #sch-writing-round2 .wb-compare-grid { grid-template-columns: 1fr; } }
+  @media (pointer: coarse) { #sch-writing-round2 button { min-height: 44px; } #sch-writing-round2 textarea, #sch-writing-round2 input { font-size: 16px; } }
+</style>
+<div id="sch-writing-round2" aria-label="游戏工作台：研究与写作布局">
+  <div class="viz-carousel" aria-label="研究与写作的两种布局" data-previous-label="上一个布局" data-next-label="下一个布局">
+    <section data-variant="资料与正文并排" aria-label="资料与正文始终并排"><div class="wb-window" data-layout="split"></div></section>
+    <section data-variant="正文优先，资料按需展开" aria-label="正文优先，按需打开研究资料" hidden><div class="wb-window" data-layout="focus"></div></section>
+  </div>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('sch-writing-round2');
+  const games = [
+    { id: 'voyage', title: '星海旅人', appId: 1001, group: '探索游戏鉴赏组', minutes: 180, phase: '撰写中' },
+    { id: 'clockwork', title: '发条工坊', appId: 1002, group: '独立游戏鉴赏组', minutes: 65, phase: '待研究' },
+    { id: 'nightline', title: '夜航信号', appId: 1003, group: '探索游戏鉴赏组', minutes: 250, phase: '待发布' }
+  ];
+  const preferences = { detailedRuns: false };
+  const states = new Map();
+  const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const button = (act, title, attrs = '', primary = false) => `<button type="button" class="cursor-interaction${primary ? ' wb-primary' : ''}" data-act="${act}" ${attrs}>${title}</button>`;
+  const game = state => games.find(g => g.id === state.game);
+  const key = state => `${state.game}:${state.language}:${state.kind}`;
+  const draft = state => state.drafts[key(state)];
+  const suggestion = state => state.suggestions[key(state)];
+  const languageLabel = state => state.language === 'schinese' ? '简体中文' : 'English';
+  const kindLabel = state => state.kind === 'long' ? '个人长评' : '鉴赏家短评';
+  function makeState(layout) {
+    const drafts = {};
+    for (const g of games) for (const lang of ['schinese', 'english']) for (const kind of ['long', 'short']) {
+      const text = lang === 'schinese' ? kind === 'long' ? `${g.title}把探索放在叙事的中心。\n\n地图细节值得留意，但后段节奏仍有重复。\n\n这段文字可以直接修改，研究建议会单独保留。` : `${g.title}以探索串起叙事，适合喜欢慢节奏发现的玩家。` : kind === 'long' ? `${g.title} connects exploration with its story.\n\nEnvironmental details are engaging, though the later pacing feels repetitive.\n\nThis is an editable example draft.` : 'Exploration and storytelling work together, with a slower pace that rewards curiosity.';
+      drafts[`${g.id}:${lang}:${kind}`] = { text, revision: 0, previous: null };
+    }
+    return { layout, game: 'voyage', language: 'schinese', kind: 'long', tab: 'writing', source: 'steam', sourcesOpen: false, compare: false, history: false, notice: '', drafts, suggestions: {}, urls: {}, running: new Set(['voyage', 'clockwork']), searchOpen: false, accountOpen: false, settingsOpen: false, reviewed: false, preview: false };
+  }
+  function sourcePanel(state) {
+    const g = game(state), s = suggestion(state);
+    const excerpt = state.source === 'steam' ? `示例评论提到：${g.title}的探索奖励较密集，剧情线索需要主动留意；也有评论认为后段重复。` : `示例媒体摘录：${g.title}通过环境细节推进叙事，流程后半的变化较少。`;
+    return `<aside class="wb-sources"><div class="wb-row"><h3>资料与建议</h3><span class="wb-grow"></span>${state.layout === 'focus' ? button('sources', '收起') : ''}</div><div class="wb-source-list">${button('source', 'Steam 评论', `data-source="steam" aria-pressed="${state.source === 'steam'}"`)}${button('source', '媒体摘录', `data-source="media" aria-pressed="${state.source === 'media'}"`)}</div><div class="wb-source-text"><p>${excerpt}</p><span class="wb-small">合成来源 · 仅用于比较布局</span></div><p class="wb-small">来源与正文分别保留；读取失败或版本存疑时在此说明。</p><div class="wb-rule"><h3>AI 建议 · ${kindLabel(state)}</h3>${s ? `<p>${esc(s.text)}</p><p class="wb-small" data-suggestion-state>${s.applied ? '已应用；原作者版本可查看' : s.baseRevision === draft(state).revision ? '与当前作者版本对应' : '正文已修改，建议基于旧版本'}</p>${button('compare', '对照后应用', s.applied ? 'disabled' : '')}` : '<p class="wb-small">先整理资料，再单独查看建议。生成不会改动作者正文。</p>'}<div class="wb-row wb-rule">${button('generate', s ? '重新生成示例建议' : '生成示例建议', '', !s)}</div></div></aside>`;
+  }
+  function authorPanel(state) {
+    const d = draft(state), s = suggestion(state), g = game(state);
+    return `<section class="wb-author"><div class="wb-row"><h3>作者正文</h3><span class="wb-grow"></span>${state.layout === 'focus' ? button('sources', state.sourcesOpen ? '收起资料' : '查看资料与建议', `aria-pressed="${state.sourcesOpen}"`) : ''}</div><div class="wb-row">${button('kind', '个人长评', `data-kind="long" aria-pressed="${state.kind === 'long'}"`)}${button('kind', '鉴赏家短评', `data-kind="short" aria-pressed="${state.kind === 'short'}"`)}<span class="wb-grow"></span>${button('preview', state.preview ? '返回编辑' : '预览')}</div>${state.preview ? `<div class="wb-source-text wb-rule wb-history">${esc(d.text)}${state.kind === 'long' ? `<div class="wb-rule wb-small">群组尾巴：投稿至 ${g.group}</div>` : ''}</div>` : `<label><span class="wb-small">${g.title} · ${languageLabel(state)} · ${kindLabel(state)}</span><textarea data-author aria-label="作者${kindLabel(state)}">${esc(d.text)}</textarea></label>`}<div class="wb-draft-meta"><span class="wb-small" data-save-state>本次草图已保留 · 版本 ${d.revision + 1}</span><span class="wb-small" data-count>${Array.from(d.text).length}${state.kind === 'short' ? ' / 199 字' : ' 字'}</span></div>${state.kind === 'short' ? `<p data-short-warning class="wb-note" role="alert" ${Array.from(d.text).length < 200 ? 'hidden' : ''}>短评需少于 200 字，请继续修改。</p><label class="wb-rule">全文链接（独立字段）<input data-full-url aria-label="全文链接" value="${esc(state.urls[`${state.game}:${state.language}`] || '')}" placeholder="个人长评发布后填写"></label><p class="wb-small">短评正文不拼接尾巴或全文链接。</p>` : ''}<div class="wb-row wb-rule">${button('history', state.history ? '收起上一版' : '查看上一版', d.previous === null ? 'disabled' : '')}<span class="wb-grow"></span>${button('publication', '检查发布目标')}</div>${state.history && d.previous !== null ? `<div class="wb-source-text wb-history wb-rule"><span class="wb-small">应用建议前保留的作者版本</span><p>${esc(d.previous)}</p></div>` : ''}${state.compare && s ? comparePanel(state) : ''}${state.notice ? `<p class="wb-note wb-rule" role="status">${esc(state.notice)}</p>` : ''}</section>`;
+  }
+  function comparePanel(state) {
+    const d = draft(state), s = suggestion(state), stale = d.revision !== s.baseRevision;
+    return `<section class="wb-compare"><h3>应用前对照 · ${game(state).title}</h3><div class="wb-compare-grid"><div><span class="wb-small">当前作者正文</span><p data-compare-author>${esc(d.text)}</p></div><div><span class="wb-small">AI 建议</span><p>${esc(s.text)}</p></div></div><p class="wb-small" data-compare-state>${stale ? '正文已有新改动。请保留当前版本，可选用建议片段或重新生成。' : '应用会保留上一版；其他游戏和语言的草稿不变。'}</p><div class="wb-row">${button('apply', '应用到当前草稿', `data-apply ${stale || s.applied ? 'disabled' : ''}`, true)}${button('cancel-compare', '保留正文，关闭对照')}</div></section>`;
+  }
+  function writing(state) {
+    const open = state.layout === 'split' || state.sourcesOpen;
+    return `<div class="wb-editor-grid${state.layout === 'focus' ? ' wb-focus' : ''}${state.sourcesOpen ? ' wb-open' : ''}">${open ? sourcePanel(state) : ''}${authorPanel(state)}</div>`;
+  }
+  function secondary(state) {
+    const g = game(state);
+    if (state.tab === 'overview') return `<section><h3>运行与任务 · ${g.title}</h3><p>Steam 上次读回 ${g.minutes} 分钟；本机本次 15 分钟。</p><p>累计目标与本次结束条件分别设置；单独停止不影响其他游戏。</p>${button(state.running.has(g.id) ? 'stop' : 'start', state.running.has(g.id) ? '停止这款游戏' : '手动启动这款游戏', `data-game="${g.id}"`)}<div class="wb-rule">${button('tab', '继续研究与写作', 'data-tab="writing"', true)}</div></section>`;
+    if (state.tab === 'achievements') return `<section><h3>成就与统计 · ${g.title}</h3><p>${state.running.has(g.id) ? '本游戏的运行请求保持。' : '本游戏未运行。'}原生操作自身串行，其他运行保持可用。</p><div class="wb-source-text"><p>示例选择：启程 · 未解锁 → 已解锁</p><p>示例统计：探索次数（INT）· 3 → 4</p><p class="wb-small">成就选择、预览与未知结果的具体界面在后续轮次继续细化。</p></div>${button('tab', '返回研究与写作', 'data-tab="writing"', true)}</section>`;
+    const base = `${state.game}:${state.language}:`, long = state.drafts[base + 'long'], short = state.drafts[base + 'short'];
+    return `<section><h3>发布目标检查</h3><p>${g.title} · AppID ${g.appId} · ${g.group} · ${languageLabel(state)}</p><div class="wb-form"><section><h3>个人长评</h3><p class="wb-history">${esc(long.text)}</p><p class="wb-small">长评尾巴将按唯一投稿群组组合。</p></section><section><h3>鉴赏家短评</h3><p>${esc(short.text)}</p><p class="wb-small">${Array.from(short.text).length} / 199 字 · 全文链接独立保存</p></section></div><div class="wb-row wb-rule">${button('tab', '返回修改', 'data-tab="writing"', true)}${button('review-target', '演示：核对目标')}</div>${state.reviewed ? '<p class="wb-note wb-rule">示例目标已核对。正式流程仍需本人在 Steam 检查并提交，长短评分别记录结果；这里没有执行发布。</p>' : ''}</section>`;
+  }
+  function render(element, state) {
+    const g = game(state), extra = state.running.size ? games.filter(item => state.running.has(item.id)).map(item => `<span class="wb-run"><span>${item.title}</span><span class="wb-small">运行请求中</span>${button('stop', '单停', `data-game="${item.id}" aria-label="单独停止${item.title}"`)}</span>`).join('') : '<span class="wb-small">没有运行中的游戏，按每款手动启动。</span>';
+    element.innerHTML = `<header class="wb-top"><span class="wb-strong">Steam Curator Hub</span><span class="wb-small">第二轮草图 · 全部为示例</span><span class="wb-grow"></span>${button('account', '演示账号 · 已连接')}${button('settings', '设置')}</header>${state.accountOpen ? '<div class="wb-main wb-small">演示账号 · 会话已保存。登录阶段与重试保留在同一上下文；本轮没有连接真实 Steam。</div>' : ''}${state.settingsOpen ? '<div class="wb-main wb-small">Gemini、媒体搜索、群组及凭据采用统一设置入口。这里不收集或保存任何密钥。</div>' : ''}<div class="wb-body"><aside class="wb-games"><h3>我的游戏</h3>${button('search', state.searchOpen ? '收起查找' : '查找游戏')}${state.searchOpen ? `<div class="wb-rule"><p class="wb-small">浏览不切换当前编辑任务；明确进入才切换。</p>${games.map(item => button('game', `进入${item.title}`, `data-game="${item.id}"`)).join(' ')}</div>` : ''}<div class="wb-rule">${games.map(item => `<button type="button" class="wb-game cursor-interaction" data-act="game" data-game="${item.id}" aria-pressed="${state.game === item.id}">${item.title}<span class="wb-small">${item.phase}</span></button>`).join('')}</div><p class="wb-small">每款游戏保留自己的群组、资料与双语草稿。</p></aside><main class="wb-main"><div class="wb-row"><div class="wb-grow"><h2>${g.title}</h2><p class="wb-small">AppID ${g.appId} · ${g.group}</p></div><label><span class="wb-small">文章语言 </span><select data-language aria-label="文章语言"><option value="schinese" ${state.language === 'schinese' ? 'selected' : ''}>简体中文</option><option value="english" ${state.language === 'english' ? 'selected' : ''}>English</option></select></label></div><nav class="wb-tabs" aria-label="当前游戏的功能">${[['overview', '概览与运行'], ['achievements', '成就 / 统计'], ['writing', '研究与写作'], ['publication', '发布准备']].map(([id, title]) => button('tab', title, `data-tab="${id}" aria-pressed="${state.tab === id}"`)).join('')}</nav>${state.tab === 'writing' ? writing(state) : secondary(state)}</main></div><footer class="wb-tray"><div class="wb-row"><span class="wb-strong">并行运行 · ${state.running.size} 款</span><span class="wb-grow"></span>${button('run-details', preferences.detailedRuns ? '收起时长详情' : '时长详情')}</div>${extra}${preferences.detailedRuns ? `<p class="wb-small">${games.filter(item => state.running.has(item.id)).map(item => `${item.title}：Steam 上次 ${item.minutes} 分钟 / 本机本次 15 分钟`).join('；')}</p>` : ''}</footer><div class="wb-state" role="status" aria-live="polite">${g.title} · ${g.group} · ${languageLabel(state)} · ${state.tab === 'writing' ? kindLabel(state) : state.tab === 'publication' ? '发布目标' : state.tab === 'overview' ? '运行概览' : '成就与统计'} · ${state.running.size} 款并行</div>`;
+  }
+  function storeView(state) { if (window.openai?.setWidgetState) window.openai.setWidgetState({ modelContent: { prototype: 'SteamCuratorHub #13 round2', layout: state.layout, game: game(state).title, section: state.tab, kind: state.kind }, privateContent: null }).catch(() => {}); }
+  function generate(state) {
+    const g = game(state), text = state.language === 'schinese' ? state.kind === 'long' ? `${g.title}用地图细节串起故事，适合愿意放慢节奏探索的玩家。\n\n示例资料对探索奖励评价较好，也指出后段变化不足。以上是来源观点整理，仍需作者判断取舍。` : `${g.title}以环境细节串起叙事，探索有回报，后段变化稍少。适合偏好慢节奏发现的玩家。` : state.kind === 'long' ? `${g.title} uses environmental detail to connect exploration and story.\n\nThe example sources praise its rewards while noting repetitive later pacing. These are source-based observations for the author to assess.` : 'Environmental storytelling rewards patient exploration, though later sections offer less variety.';
+    state.suggestions[key(state)] = { text, baseRevision: draft(state).revision, applied: false }; state.notice = ''; state.compare = false;
+  }
+  for (const element of root.querySelectorAll('[data-layout]')) {
+    const state = makeState(element.dataset.layout); states.set(element, state); generate(state); render(element, state);
+    element.addEventListener('input', event => {
+      if (event.target.matches('[data-author]')) {
+        const d = draft(state); d.text = event.target.value; d.revision++;
+        element.querySelector('[data-save-state]').textContent = `本次草图已保留 · 版本 ${d.revision + 1}`;
+        element.querySelector('[data-count]').textContent = `${Array.from(d.text).length}${state.kind === 'short' ? ' / 199 字' : ' 字'}`;
+        const compareAuthor = element.querySelector('[data-compare-author]'); if (compareAuthor) compareAuthor.textContent = d.text;
+        const warning = element.querySelector('[data-short-warning]'); if (warning) warning.hidden = Array.from(d.text).length < 200;
+        const s = suggestion(state), label = element.querySelector('[data-suggestion-state]'); if (label && s && !s.applied) label.textContent = '正文已修改，建议基于旧版本';
+        const apply = element.querySelector('[data-apply]'); if (apply && s) apply.disabled = s.applied || s.baseRevision !== d.revision;
+        const compareLabel = element.querySelector('[data-compare-state]'); if (compareLabel && s && s.baseRevision !== d.revision) compareLabel.textContent = '正文已有新改动。请保留当前版本，可选用建议片段或重新生成。';
+      }
+      if (event.target.matches('[data-full-url]')) state.urls[`${state.game}:${state.language}`] = event.target.value;
+    });
+    element.addEventListener('change', event => { if (event.target.matches('[data-language]')) { state.language = event.target.value; state.compare = false; state.history = false; state.preview = false; state.notice = ''; render(element, state); storeView(state); } });
+    element.addEventListener('click', event => {
+      const target = event.target.closest('button[data-act]'); if (!target || target.disabled) return;
+      const act = target.dataset.act;
+      if (act === 'game') { state.game = target.dataset.game; state.compare = false; state.history = false; state.preview = false; state.notice = ''; state.reviewed = false; state.searchOpen = false; }
+      if (act === 'tab') { state.tab = target.dataset.tab; state.compare = false; state.preview = false; state.notice = ''; }
+      if (act === 'kind') { state.kind = target.dataset.kind; state.compare = false; state.history = false; state.preview = false; state.notice = ''; }
+      if (act === 'sources') state.sourcesOpen = !state.sourcesOpen;
+      if (act === 'source') state.source = target.dataset.source;
+      if (act === 'generate') generate(state);
+      if (act === 'compare') state.compare = true;
+      if (act === 'cancel-compare') state.compare = false;
+      if (act === 'apply') { const d = draft(state), s = suggestion(state); if (!s || s.applied || d.revision !== s.baseRevision) state.notice = '作者正文已有新改动，未应用旧建议。'; else { d.previous = d.text; d.text = s.text; d.revision++; s.applied = true; state.compare = false; state.notice = '示例建议已应用，上一版作者正文已保留。'; } }
+      if (act === 'preview') state.preview = !state.preview;
+      if (act === 'history') state.history = !state.history;
+      if (act === 'publication') { state.tab = 'publication'; state.compare = false; state.preview = false; }
+      if (act === 'review-target') state.reviewed = true;
+      if (act === 'stop') state.running.delete(target.dataset.game);
+      if (act === 'start') state.running.add(target.dataset.game);
+      if (act === 'run-details') preferences.detailedRuns = !preferences.detailedRuns;
+      if (act === 'search') state.searchOpen = !state.searchOpen;
+      if (act === 'account') state.accountOpen = !state.accountOpen;
+      if (act === 'settings') state.settingsOpen = !state.settingsOpen;
+      for (const [el, s] of states) render(el, s); storeView(state);
+    });
+  }
+  function restoreView(saved) { if (saved?.prototype !== 'SteamCuratorHub #13 round2') return; for (const [element, state] of states) if (state.layout === saved.layout) { if (['writing', 'overview', 'achievements', 'publication'].includes(saved.section)) state.tab = saved.section; if (['long', 'short'].includes(saved.kind)) state.kind = saved.kind; render(element, state); } }
+  restoreView(window.openai?.widgetState?.modelContent);
+  window.addEventListener('openai:set_globals', event => restoreView(event.detail?.globals?.widgetState?.modelContent));
+  if (globalThis.Tweak) { const tweak = new Tweak({ container: root, onChange: () => { for (const [el, state] of states) render(el, state); } }); tweak.addToggle(preferences, 'detailedRuns', { label: '展开并行运行的时长详情' }); }
+})();
+</script>

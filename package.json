@@ -15,7 +15,8 @@
     "start": "electron .",
     "start:demo": "electron . --fixture",
     "smoke": "node desktop/smoke.mjs",
-    "package:mac": "node desktop/package.mjs"
+    "package:mac": "node desktop/package.mjs",
+    "prototype:ux": "node desktop/renderer/ux-prototype-preview.mjs"
   },
   "dependencies": {
     "steam-user": "5.3.0"
