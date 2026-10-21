@@ -455,6 +455,32 @@ test('unknown/missing/regressing readback interrupts active runs and does not sc
   }
 });
 
+test('a Steam counter falling after observed growth interrupts all runs even above the starting baseline', async t => {
+  const s = setup(); t.after(() => s.service.close());
+  await s.login();
+  await s.service.startRun({ appId: 1001, totalTargetMinutes: 100 });
+  await s.service.startRun({ appId: 1002 });
+  s.clients[0].apps[0].playtime_forever = 30;
+  await s.service.ownedGames();
+  assert.equal(s.service.runs()[0].readbackStatus, 'increase_observed');
+  assert.ok(s.service.runs().every(run => run.state === 'running'));
+  await s.service.ownedGames();
+  assert.ok(s.service.runs().every(run => run.state === 'running'));
+
+  s.clients[0].apps[0].playtime_forever = 25;
+  await assert.rejects(s.service.ownedGames(), { code: 'account_changed' });
+  const regressed = s.service.runs().find(run => run.appId === 1001);
+  assert.equal(regressed.baselineSteamMinutes, 10);
+  assert.equal(regressed.steamMinutes, 25);
+  assert.equal(regressed.readbackStatus, 'inconsistent');
+  assert.ok(s.service.runs().every(run => run.state === 'unknown' && run.reason === 'steam_readback_unavailable'));
+  assert.deepEqual(s.clients[0].requests.at(-1).apps, []);
+  const requests = structuredClone(s.clients[0].requests);
+  await s.clock.advance(120000);
+  assert.deepEqual(s.clients[0].requests, requests);
+  assert.equal(s.clients.length, 1);
+});
+
 test('owned-game request timeout while running clears all requested games', async () => {
   const s = setup(); await s.login(); await s.service.startRun({ appId: 1001 });
   s.clients[0].readImpl = () => new Promise(() => {});

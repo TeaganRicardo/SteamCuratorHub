@@ -1,6 +1,6 @@
 # 项目状态
 
-更新：2026-10-18。阶段：macOS arm64 桌面 MVP 已合并至 `main`；真实 Steam、发布、付费 API、视觉验收及正式分发尚未通过。
+更新：2026-10-21。阶段：macOS arm64 桌面 MVP 与 P0 会话/并行操作修复已合并；继续修复时长回读一致性，正式界面等待交互确认；真实 Steam、发布、付费 API、视觉验收及正式分发尚未通过。
 
 GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md) 为准。用户于 2026-10-17 授权全权自律开发，进一步要求推进到首版完整功能 MVP，并选择 Gemini API；仅在必要时确认需求与实现细节。未决产品选项与工程默认分别记录。
 
@@ -8,6 +8,8 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 
 | 工作 | 分支 / 提交 | 记录与状态 |
 | --- | --- | --- |
+| 本轮开发基线（`main`） | `ba47a2b23ef4553aa5db5594eaa4aff4a26da1c7` | [PR #17](https://github.com/TeaganRicardo/SteamCuratorHub/pull/17) 已于 2026-10-18 合并；[对应主线 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39151447941)；2026-10-21 已重新 fetch 和核实 |
+| 时长回读一致性修复 | `codex/session-lifecycle-20261021` | 修复运行中分钟数高于起点但低于上次观察值时仍继续运行的问题；PR、精确 head 与交付结果以本轮 PR 记录为准 |
 | MVP 合并点（`main` 历史提交） | `731c6a1aea973f4ddf786042936b8a4f610d0a48` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 已于 2026-10-18 squash 合并；[主分支 CI 七项成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39134308435) |
 | 完整桌面 MVP 原 PR head | `3696effea408e93378aada8e71ac842f78a3926c` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 最终复审和补丁；[同 head 七项 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39134063102)；[#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10) 保留真实验收门槛 |
 | 前期 Steam 验证工具 | `ee363c01eb876005a539ee70221576a8c3696d98` | [PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9) 已先前 squash 合并；18 项测试只证明独立子实验 |
@@ -61,7 +63,7 @@ CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时
 
 ## 2026-10-18 P0 底层修复
 
-接手远端 `main` 为 `7f3fb8ad26f187a8a80f7cfb17f9369e36043c6c`；复核并合并仅同步用户需求的 [PR #16](https://github.com/TeaganRicardo/SteamCuratorHub/pull/16) 后，开发基线为 `24be6a8eea3ae44c8c82c7a1054a1fa3c1d1b237`。修复分支 `codex/session-and-stats-fixes` 使用新的独立工作树，不改已有用户目录或 MVP 工作树；实现与最终 head、审查、构建及 CI 记录见 [PR #17](https://github.com/TeaganRicardo/SteamCuratorHub/pull/17)。
+接手远端 `main` 为 `7f3fb8ad26f187a8a80f7cfb17f9369e36043c6c`；复核并合并仅同步用户需求的 [PR #16](https://github.com/TeaganRicardo/SteamCuratorHub/pull/16) 后，开发基线为 `24be6a8eea3ae44c8c82c7a1054a1fa3c1d1b237`。修复分支 `codex/session-and-stats-fixes` 使用独立工作树，不改已有用户目录或 MVP 工作树；[PR #17](https://github.com/TeaganRicardo/SteamCuratorHub/pull/17) 已合并至 `ba47a2b23ef4553aa5db5594eaa4aff4a26da1c7`，其交付记录包含最终 head、审查、构建及 CI 证据。
 
 - #14：登录提交、Guard、成功/失败保持同一可见上下文，包含账号、阶段与明确错误；加密保存已确认账号的 refresh token 并接入启动恢复与续期。应用管理三次有界重连；退出应用保留保存会话，显式退出连接清除；密码不保存，认证恢复不恢复模拟运行。
 - #15：移除 controller 和 renderer 的全局 run/native 互斥。保留原生操作自身串行、账号/预览/旧值校验和未知写入门禁；新增真实 controller + SteamService 的合成边界回归，覆盖相同/其他 AppID 读写、运行 preflight 并行、写入期间独立启停和完整 `gamesPlayed` 集合。
@@ -69,6 +71,12 @@ CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时
 - 本机已执行 241/241 项完整离线测试、桌面语法检查与时长 fixture，含开发依赖的漏洞审计为 0。Electron fixture smoke 已通过：在同一 AppID active 时执行真实 helper 的合成读写，检查双运行、单停和 Node 隔离；最终构建与精确提交结果以 PR #17 的交付记录为准。
 
 #13 的正式 UI 仍冻结；本轮只修功能验证壳的登录状态反馈。#14/#15 的代码回归不替代用户真实 Steam 重验；#5/#6/#7/#10 继续保持开放，不据此标记发布候选。
+
+## 2026-10-21 时长回读一致性修复
+
+在独立工作树重新安装锁定依赖后，当前主线 241/241 项离线测试通过。新增回归先证明 `10 → 30 → 25` 分钟被错误归为正常增长；修复后，每笔读数同时与起点和上一笔观察比较。回落的真实读数仍保留，标为 inconsistent，使用现有 unknown 清理路径停止活动请求，不自动重连或续跑。相同读数保持可用。
+
+修复后的完整离线测试 242/242 通过，桌面语法检查、时长 fixture 和含开发依赖的漏洞审计通过（0 漏洞）。本轮不连接真实 Steam、不调用付费 API、不发布评测；#13 正式前端冻结及 #5/#6/#7/#10/#14/#15 的人工验收门槛继续保留。
 
 ## 后续顺序与真实门槛
 
