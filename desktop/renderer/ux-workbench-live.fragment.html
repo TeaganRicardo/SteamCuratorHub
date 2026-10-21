@@ -1,0 +1,263 @@
+<!-- Disposable #13 refinement: confirmed focus layout, resizable panes and direct rich editing. Synthetic state only. -->
+<style>
+  #sch-workbench-live { color-scheme: light dark; font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: light-dark(#24262b, #e5e7eb); --w-bg: light-dark(#fff, #202226); --w-soft: light-dark(#f4f5f6, #2a2d33); --w-line: light-dark(#d8dce2, #494e57); --w-text: light-dark(#24262b, #e5e7eb); --w-muted: light-dark(#626a76, #b6beca); --w-pick: light-dark(#e5e8ed, #414954); --w-warn: light-dark(#805b17, #edce91); }
+  #sch-workbench-live * { box-sizing: border-box; }
+  #sch-workbench-live [hidden] { display: none !important; }
+  #sch-workbench-live .w-window { background: var(--w-bg); border: 1px solid var(--w-line); border-radius: 10px; overflow: hidden; min-height: 740px; }
+  #sch-workbench-live .w-top { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 12px 100px 12px 16px; border-bottom: 1px solid var(--w-line); }
+  #sch-workbench-live .w-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  #sch-workbench-live .w-grow { flex: 1; min-width: 0; }
+  #sch-workbench-live .w-small { color: var(--w-muted); font-size: 12px; }
+  #sch-workbench-live .w-strong { font-weight: 500; }
+  #sch-workbench-live h2 { font-size: 21px; line-height: 1.4; font-weight: 500; margin: 0 0 7px; }
+  #sch-workbench-live h3 { font-size: 15px; font-weight: 500; margin: 0 0 9px; }
+  #sch-workbench-live p { margin: 0 0 11px; }
+  #sch-workbench-live button, #sch-workbench-live select, #sch-workbench-live input, #sch-workbench-live textarea { font: inherit; color: inherit; background: var(--w-bg); border: 1px solid var(--w-line); border-radius: 5px; padding: 6px 9px; max-width: 100%; }
+  #sch-workbench-live button:disabled { opacity: .5; }
+  #sch-workbench-live button[aria-pressed="true"] { background: var(--w-pick); }
+  #sch-workbench-live .w-primary { color: var(--w-bg); background: var(--w-text); border-color: var(--w-text); }
+  #sch-workbench-live .w-body { display: grid; grid-template-columns: var(--w-games-width, 160px) 12px minmax(0, 1fr); }
+  #sch-workbench-live .w-games { background: var(--w-soft); padding: 16px 10px; min-width: 0; }
+  #sch-workbench-live .w-game { display: block; width: 100%; text-align: left; margin-bottom: 8px; }
+  #sch-workbench-live .w-game span { display: block; }
+  #sch-workbench-live .w-divider { padding: 0; border: 0; border-radius: 0; background: var(--w-bg); touch-action: none; cursor: col-resize; position: relative; min-width: 12px; }
+  #sch-workbench-live .w-divider::before { content: ""; position: absolute; top: 0; bottom: 0; width: 1px; left: 5px; background: var(--w-line); }
+  #sch-workbench-live .w-divider::after { content: "⋮"; color: var(--w-muted); position: absolute; top: 45%; left: 1px; }
+  #sch-workbench-live .w-divider:hover::before, #sch-workbench-live .w-divider:focus-visible::before { width: 3px; background: var(--w-text); }
+  #sch-workbench-live .w-main { min-width: 0; padding: 18px 16px; }
+  #sch-workbench-live .w-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--w-line); padding: 8px 0 10px; margin-bottom: 16px; }
+  #sch-workbench-live .w-tabs button { border-color: transparent; }
+  #sch-workbench-live .w-writing { display: grid; grid-template-columns: minmax(0, 1fr); }
+  #sch-workbench-live .w-writing.w-open { grid-template-columns: minmax(0, 1fr) 12px var(--w-source-width, 270px); }
+  #sch-workbench-live .w-author { min-width: 0; }
+  #sch-workbench-live .w-sources { padding-left: 13px; min-width: 0; }
+  #sch-workbench-live .w-tools { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 12px; padding: 7px; border: 1px solid var(--w-line); border-bottom: 0; border-radius: 5px 5px 0 0; }
+  #sch-workbench-live .w-tools button { min-width: 32px; padding: 4px 7px; }
+  #sch-workbench-live .w-editor { min-height: 255px; padding: 16px; border: 1px solid var(--w-line); border-radius: 5px; overflow-wrap: anywhere; white-space: pre-wrap; }
+  #sch-workbench-live .w-tools + .w-editor { border-radius: 0 0 5px 5px; }
+  #sch-workbench-live .w-editor h2, #sch-workbench-live .w-rich h2 { font-size: 21px; margin: 0 0 12px; }
+  #sch-workbench-live .w-editor h3, #sch-workbench-live .w-rich h3 { font-size: 17px; margin: 0 0 10px; }
+  #sch-workbench-live .w-editor p, #sch-workbench-live .w-rich p { margin: 0 0 12px; }
+  #sch-workbench-live .w-editor strong, #sch-workbench-live .w-editor b, #sch-workbench-live .w-rich strong { font-weight: 600; }
+  #sch-workbench-live .w-editor ul, #sch-workbench-live .w-editor ol, #sch-workbench-live .w-rich ul { padding-left: 23px; margin: 10px 0 14px; }
+  #sch-workbench-live .w-editor blockquote, #sch-workbench-live .w-rich blockquote { margin: 12px 0; border-left: 3px solid var(--w-line); padding-left: 12px; color: var(--w-muted); }
+  #sch-workbench-live .w-editor:empty::before { content: attr(data-placeholder); color: var(--w-muted); }
+  #sch-workbench-live .w-rule { border-top: 1px solid var(--w-line); padding-top: 13px; margin-top: 15px; }
+  #sch-workbench-live .w-surface { background: var(--w-soft); padding: 12px; border-radius: 4px; margin: 12px 0; overflow-wrap: anywhere; }
+  #sch-workbench-live .w-note { color: var(--w-warn); border-left: 3px solid var(--w-line); padding-left: 10px; }
+  #sch-workbench-live .w-metadata { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  #sch-workbench-live .w-footer-preview { margin-top: 15px; border-top: 1px solid var(--w-line); padding-top: 12px; color: var(--w-muted); }
+  #sch-workbench-live .w-field { display: grid; gap: 7px; }
+  #sch-workbench-live .w-field input { width: 100%; }
+  #sch-workbench-live .w-compare { border: 1px solid var(--w-line); border-radius: 5px; padding: 14px; margin-top: 15px; }
+  #sch-workbench-live .w-two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  #sch-workbench-live .w-copy textarea { width: 100%; min-height: 115px; white-space: pre-wrap; }
+  #sch-workbench-live .w-tray { background: var(--w-soft); border-top: 1px solid var(--w-line); padding: 12px 16px; }
+  #sch-workbench-live .w-run { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-right: 16px; margin-top: 6px; }
+  #sch-workbench-live .w-status { border-top: 1px solid var(--w-line); color: var(--w-muted); font-size: 12px; padding: 8px 16px; }
+  #sch-workbench-live .w-source-options { display: flex; flex-wrap: wrap; gap: 5px; }
+  #sch-workbench-live table { width: 100%; border-collapse: collapse; }
+  #sch-workbench-live td, #sch-workbench-live th { text-align: left; font-weight: 400; padding: 7px 5px; border-bottom: 1px solid var(--w-line); }
+  #sch-workbench-live th { color: var(--w-muted); font-size: 12px; }
+  @media (max-width: 650px) { #sch-workbench-live .w-body { grid-template-columns: 128px minmax(0, 1fr); } #sch-workbench-live .w-divider { display: none; } #sch-workbench-live .w-writing.w-open { grid-template-columns: 1fr; } #sch-workbench-live .w-sources { margin-top: 18px; border-top: 1px solid var(--w-line); padding: 15px 0 0; } #sch-workbench-live .w-two { grid-template-columns: 1fr; } }
+  @media (max-width: 470px) { #sch-workbench-live .w-body { grid-template-columns: 1fr; } #sch-workbench-live .w-games { border-bottom: 1px solid var(--w-line); } #sch-workbench-live .w-game { width: auto; display: inline-block; margin-right: 4px; } #sch-workbench-live .w-top { padding-right: 16px; padding-top: 48px; } #sch-workbench-live .w-main { padding: 14px; } }
+  @media (pointer: coarse) { #sch-workbench-live button { min-height: 44px; } #sch-workbench-live .w-editor, #sch-workbench-live input, #sch-workbench-live textarea { font-size: 16px; } }
+</style>
+<div id="sch-workbench-live" aria-label="正文优先的游戏工作台：拖拽宽度与直接排版编辑">
+  <div class="w-window"></div>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('sch-workbench-live'), surface = root.querySelector('.w-window');
+  const groups = [{ id: '45134494', name: '浮生评测' }, { id: '45525570', name: '桃你欢心' }];
+  const games = [{ id: 'voyage', title: '星海旅人', appId: 1001, minutes: 180, phase: '撰写中' }, { id: 'clockwork', title: '发条工坊', appId: 1002, minutes: 65, phase: '待研究' }, { id: 'nightline', title: '夜航信号', appId: 1003, minutes: 250, phase: '待发布' }];
+  const state = { game: 'voyage', language: 'schinese', kind: 'long', tab: 'writing', source: 'steam', sourcesOpen: false, gamesWidth: 160, sourceWidth: 270, drafts: {}, suggestions: {}, urls: {}, groups: { voyage: '45134494', clockwork: '45525570', nightline: '45134494' }, running: new Set(['voyage', 'clockwork']), compare: false, history: false, runDetails: false, search: false, account: false, settings: false, copyReport: null, notice: '', native: {}, nativePreview: false };
+  const scene = { writeResult: 'complete' };
+  let savedRange = null, drag = null;
+  const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const currentGame = () => games.find(g => g.id === state.game);
+  const currentGroup = () => groups.find(g => g.id === state.groups[state.game]);
+  const docKey = (kind = state.kind) => `${state.game}:${state.language}:${kind}`;
+  const currentDraft = () => state.drafts[docKey()];
+  const kindName = kind => kind === 'long' ? '个人长评' : '鉴赏家短评';
+  const languageName = () => state.language === 'schinese' ? '简体中文' : 'English';
+  const button = (action, title, attrs = '', primary = false) => `<button type="button" class="cursor-interaction${primary ? ' w-primary' : ''}" data-action="${action}" ${attrs}>${title}</button>`;
+  function paragraphs(text) { return text.split(/\n\n+/).map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join(''); }
+  function safeHtml(source) {
+    const input = document.createElement('div'); input.innerHTML = source;
+    const result = document.createElement('div');
+    const allowed = new Set(['P', 'DIV', 'BR', 'H1', 'H2', 'H3', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'CODE', 'A', 'SPAN']);
+    function visit(node, parent) {
+      if (node.nodeType === 3) { parent.append(document.createTextNode(node.textContent)); return; }
+      if (node.nodeType !== 1 || ['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT'].includes(node.tagName)) return;
+      if (!allowed.has(node.tagName)) { for (const child of node.childNodes) visit(child, parent); return; }
+      const output = document.createElement(({ B: 'strong', I: 'em', STRIKE: 's' })[node.tagName] || node.tagName.toLowerCase());
+      if (node.tagName === 'A') { try { const url = new URL(node.getAttribute('href')); if (url.protocol === 'https:' && !url.username && !url.password) output.setAttribute('href', url.href); } catch {} }
+      for (const child of node.childNodes) visit(child, output); parent.append(output);
+    }
+    for (const node of input.childNodes) visit(node, result);
+    return result.innerHTML;
+  }
+  function plainText(node) {
+    if (node.nodeType === 3) return node.textContent.replace(/\u00a0/g, ' ');
+    if (node.nodeType !== 1 && node.nodeType !== 11) return '';
+    if (node.nodeName === 'BR') return '\n';
+    const text = [...node.childNodes].map(plainText).join('');
+    return text + (['P', 'DIV', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'LI'].includes(node.nodeName) ? '\n' : '');
+  }
+  function bbNode(node) {
+    if (node.nodeType === 3) return node.textContent.replace(/\u00a0/g, ' ');
+    if (node.nodeType !== 1 && node.nodeType !== 11) return '';
+    if (node.nodeName === 'BR') return '\n';
+    const text = [...node.childNodes].map(bbNode).join('');
+    const tags = { STRONG: 'b', B: 'b', EM: 'i', I: 'i', U: 'u', S: 's', STRIKE: 's', H1: 'h1', H2: 'h2', H3: 'h3', BLOCKQUOTE: 'quote' };
+    if (tags[node.nodeName]) return `[${tags[node.nodeName]}]${text.trimEnd()}[/${tags[node.nodeName]}]${['H1','H2','H3','BLOCKQUOTE'].includes(node.nodeName) ? '\n\n' : ''}`;
+    if (node.nodeName === 'PRE') return `[code]${node.textContent}[/code]\n\n`;
+    if (node.nodeName === 'UL' || node.nodeName === 'OL') { const tag = node.nodeName === 'UL' ? 'list' : 'olist'; return `[${tag}]\n${text}[/${tag}]\n\n`; }
+    if (node.nodeName === 'LI') return `[*]${text.trimEnd()}\n`;
+    if (node.nodeName === 'A') { try { const url = new URL(node.getAttribute('href')); if (url.protocol === 'https:' && !url.username && !url.password) return `[url=${url.href}]${text}[/url]`; } catch {} }
+    return text + (['P', 'DIV'].includes(node.nodeName) ? '\n\n' : '');
+  }
+  function bodyForCopy(draft, kind) { if (kind === 'short') return draft.text; const box = document.createElement('div'); box.innerHTML = draft.html; return [...box.childNodes].map(bbNode).join('').trim(); }
+  for (const g of games) {
+    state.native[g.id] = { unlocked: false, unknown: false, message: '' };
+    for (const lang of ['schinese', 'english']) for (const kind of ['long', 'short']) {
+      const text = lang === 'schinese' ? kind === 'long' ? `${g.title}的探索与叙事\n\n地图细节值得留意，后段节奏仍有重复。\n\n探索奖励清楚\n剧情线索需要主动发现` : `${g.title}以环境细节串起叙事，适合偏好慢节奏发现的玩家。` : kind === 'long' ? `${g.title}: exploration and story\n\nEnvironmental details reward curiosity, though the later pacing feels repetitive.\n\nClear exploration rewards\nStory clues invite attention` : 'Environmental storytelling rewards patient exploration, with a slower pace.';
+      const html = kind === 'long' ? lang === 'schinese' ? `<h2>${esc(g.title)}的探索与叙事</h2><p>地图细节<strong>值得留意</strong>，后段节奏仍有重复。</p><ul><li>探索奖励清楚</li><li>剧情线索需要主动发现</li></ul>` : `<h2>${esc(g.title)}: exploration and story</h2><p>Environmental details <strong>reward curiosity</strong>, though later pacing feels repetitive.</p><ul><li>Clear exploration rewards</li><li>Story clues invite attention</li></ul>` : esc(text);
+      const rendered = document.createElement('div'); rendered.innerHTML = html;
+      state.drafts[`${g.id}:${lang}:${kind}`] = { html, text: kind === 'long' ? plainText(rendered).trimEnd() : text, revision: 0, previous: null };
+    }
+  }
+  function saveView() { if (window.openai?.setWidgetState) window.openai.setWidgetState({ modelContent: { prototype: 'SteamCuratorHub #13 live-editor', game: currentGame().title, section: state.tab, kind: state.kind }, privateContent: { gamesWidth: state.gamesWidth, sourceWidth: state.sourceWidth, sourcesOpen: state.sourcesOpen } }).catch(() => {}); }
+  function divider(kind, label) { return `<button type="button" class="w-divider" role="separator" aria-orientation="vertical" aria-label="${label}" data-resize="${kind}" aria-valuemin="${kind === 'games' ? 125 : 180}" aria-valuemax="${kind === 'games' ? 280 : 480}" aria-valuenow="${kind === 'games' ? state.gamesWidth : state.sourceWidth}"></button>`; }
+  function applyWidths() {
+    const width = surface.clientWidth || 1024;
+    const gamesWidth = Math.max(125, Math.min(state.gamesWidth, 280, Math.max(125, width - 420)));
+    surface.style.setProperty('--w-games-width', `${gamesWidth}px`);
+    const writing = surface.querySelector('.w-writing'), available = writing?.clientWidth || width - gamesWidth - 44;
+    const sourceWidth = Math.max(180, Math.min(state.sourceWidth, 480, Math.max(180, available - 252)));
+    surface.style.setProperty('--w-source-width', `${sourceWidth}px`);
+    const gamesHandle = surface.querySelector('[data-resize="games"]'), sourceHandle = surface.querySelector('[data-resize="sources"]');
+    gamesHandle?.setAttribute('aria-valuenow', String(Math.round(gamesWidth))); gamesHandle?.setAttribute('aria-valuemax', String(Math.round(Math.min(280, Math.max(125, width - 420)))));
+    sourceHandle?.setAttribute('aria-valuenow', String(Math.round(sourceWidth))); sourceHandle?.setAttribute('aria-valuemax', String(Math.round(Math.min(480, Math.max(180, available - 252)))));
+  }
+  function generateSuggestion() {
+    const text = state.language === 'schinese' ? state.kind === 'long' ? `${currentGame().title}通过环境细节把探索和叙事连接起来。示例资料肯定探索奖励，也指出后段变化不足；这些来源观点仍需作者判断取舍。` : `${currentGame().title}以探索串起叙事，细节有回报，后段变化稍少。` : state.kind === 'long' ? `${currentGame().title} connects exploration and story through environmental detail. The example sources praise its rewards while noting less variety later; these observations remain for the author to assess.` : 'Exploration and environmental storytelling work together, with less variety later.';
+    state.suggestions[docKey()] = { text, baseRevision: currentDraft().revision, applied: false }; state.compare = false;
+  }
+  generateSuggestion();
+  function sourcePanel() {
+    const s = state.suggestions[docKey()];
+    return `<aside class="w-sources"><div class="w-row"><h3>资料与建议</h3><span class="w-grow"></span>${button('sources', '收起')}</div><div class="w-source-options">${button('source', 'Steam 评论', `data-source="steam" aria-pressed="${state.source === 'steam'}"`)}${button('source', '媒体摘录', `data-source="media" aria-pressed="${state.source === 'media'}"`)}</div><div class="w-surface"><p>${state.source === 'steam' ? '示例评论：探索奖励较密集，剧情线索需要主动留意；也有评论认为后段重复。' : '示例媒体摘录：环境细节推进叙事，流程后半的变化较少。'}</p><span class="w-small">合成来源 · ${currentGame().title}</span></div><p class="w-small">来源、AI 建议与作者正文分别保留。</p><section class="w-rule"><h3>AI 建议 · ${kindName(state.kind)}</h3>${s ? `<p>${esc(s.text)}</p><p class="w-small" data-suggestion-state>${s.applied ? '已应用，上一版作者正文保留' : s.baseRevision === currentDraft().revision ? '与当前作者版本对应' : '正文已修改，建议基于旧版本'}</p>${button('compare', '对照后应用', s.applied ? 'disabled' : '')}` : '<p class="w-small">生成建议不会改动正文。</p>'}<div class="w-rule">${button('generate', s ? '重新生成示例建议' : '生成示例建议')}</div></section></aside>`;
+  }
+  function comparePanel() {
+    const d = currentDraft(), s = state.suggestions[docKey()]; if (!s) return '';
+    return `<section class="w-compare"><h3>应用建议前对照</h3><div class="w-two"><div><p class="w-small">当前作者正文</p><div class="w-rich" data-compare-author>${state.kind === 'long' ? d.html : esc(d.text)}</div></div><div><p class="w-small">AI 建议</p><p>${esc(s.text)}</p></div></div><p class="w-small" data-compare-status>${s.baseRevision === d.revision ? '应用会保留上一版作者正文。' : '正文已有新改动，旧建议不能直接覆盖。'}</p><div class="w-row">${button('apply-suggestion', '应用到当前草稿', `data-apply-suggestion ${s.applied || s.baseRevision !== d.revision ? 'disabled' : ''}`, true)}${button('cancel-compare', '保留正文')}</div></section>`;
+  }
+  function authorPanel() {
+    const d = currentDraft(), group = currentGroup();
+    const toolbar = state.kind === 'long' ? `<div class="w-tools" role="toolbar" aria-label="正文格式"><button type="button" class="cursor-interaction" data-format="bold" aria-label="加粗"><b>B</b></button><button type="button" class="cursor-interaction" data-format="italic" aria-label="斜体"><i>I</i></button>${button('block', '标题', 'data-block="h2"')}${button('block', '正文', 'data-block="p"')}${button('format', '列表', 'data-command="insertUnorderedList"')}${button('block', '引用', 'data-block="blockquote"')}${button('format', '撤销', 'data-command="undo"')}</div>` : '';
+    return `<section class="w-author"><div class="w-row"><h3>作者正文</h3><span class="w-grow"></span>${button('sources', state.sourcesOpen ? '收起资料' : '查看资料与建议', `aria-pressed="${state.sourcesOpen}"`)}</div><div class="w-row">${button('kind', '个人长评', `data-kind="long" aria-pressed="${state.kind === 'long'}"`)}${button('kind', '鉴赏家短评', `data-kind="short" aria-pressed="${state.kind === 'short'}"`)}<span class="w-grow"></span>${button('copy', '复制到 Steam', '', true)}</div>${toolbar}<div class="w-editor" contenteditable="${state.kind === 'long' ? 'true' : 'plaintext-only'}" role="textbox" aria-multiline="true" aria-label="${kindName(state.kind)}正文，输入即排版" data-editor data-placeholder="直接在这里撰写">${state.kind === 'long' ? d.html : esc(d.text)}</div><div class="w-metadata"><span class="w-small" data-save-state>本次草图已保留 · 版本 ${d.revision + 1}</span><span class="w-small" data-count>${Array.from(d.text).length}${state.kind === 'short' ? ' / 199 字' : ' 字'}</span></div>${state.kind === 'long' ? `<div class="w-footer-preview"><span class="w-small">群组尾巴 · 随正文组合复制</span><div>${group.name}</div></div>` : `<p class="w-note" role="alert" data-short-warning ${Array.from(d.text).length < 200 ? 'hidden' : ''}>短评需少于 200 字，请继续修改。</p><label class="w-field w-rule">全文链接（独立字段）<input data-full-url aria-label="全文链接" value="${esc(state.urls[`${state.game}:${state.language}`] || '')}" placeholder="个人长评发布后填写"></label><p class="w-small">短评按纯文本复制，不拼接尾巴或全文链接。</p>`}<div class="w-row w-rule">${button('history', state.history ? '收起上一版' : '查看上一版', d.previous ? '' : 'disabled')}<span class="w-grow"></span>${button('publication', '检查发布目标')}</div>${state.history && d.previous ? `<section class="w-surface w-rich"><span class="w-small">应用建议前保留的作者版本</span>${state.kind === 'long' ? d.previous.html : esc(d.previous.text)}</section>` : ''}${state.compare ? comparePanel() : ''}${state.notice ? `<p class="w-note w-rule" role="status">${esc(state.notice)}</p>` : ''}<div data-copy-result>${copyResult()}</div></section>`;
+  }
+  function copyResult() {
+    const report = state.copyReport; if (!report) return '';
+    return `<section class="w-copy w-rule"><div class="w-row"><p role="status">${esc(report.status)}</p><span class="w-grow"></span>${button('close-copy', '收起')}</div>${report.fallback ? `<label class="w-field">可选中后手动复制<textarea readonly aria-label="待复制的 Steam 文本">${esc(report.text)}</textarea></label>` : ''}</section>`;
+  }
+  function secondaryPanel() {
+    const g = currentGame(), n = state.native[state.game];
+    if (state.tab === 'overview') return `<section><h3>运行与任务 · ${g.title}</h3><p>Steam 上次读回 ${g.minutes} 分钟；本机本次 15 分钟。</p><div class="w-two"><label class="w-field">累计 Steam 总分钟目标<input type="number" value="240" aria-label="累计 Steam 总分钟目标"></label><label class="w-field">本次结束条件<select aria-label="本次结束条件"><option>30 分钟后停止</option><option>1 小时后停止</option><option>不设置期限</option></select></label></div><div class="w-row w-rule">${button(state.running.has(g.id) ? 'stop' : 'start', state.running.has(g.id) ? '停止这款游戏' : '手动启动这款游戏', `data-game="${g.id}"`, true)}${button('tab', '同时管理成就', 'data-tab="achievements"')}</div><p class="w-small w-rule">各款独立启停；开始或停止运行不会改变评测进度。</p></section>`;
+    if (state.tab === 'achievements') return `<section><h3>成就与统计 · ${g.title}</h3><p>${state.running.has(g.id) ? '本游戏的运行请求保持。' : '本游戏未运行。'}其他游戏的运行独立保留。</p>${n.unknown ? `<p class="w-note">上次写入结果未知，请先重新读取并核对。</p>${button('acknowledge', '演示：重新读取并确认已核对')}` : `<table><thead><tr><th>示例项目</th><th>原值</th><th>拟提交值</th></tr></thead><tbody><tr><td>启程</td><td>${n.unlocked ? '已解锁' : '未解锁'}</td><td>${n.unlocked ? '重新锁定' : '解锁'}</td></tr><tr><td>探索次数 · INT</td><td>${n.unlocked ? '4' : '3'}</td><td>${n.unlocked ? '3' : '4'}</td></tr></tbody></table><div class="w-rule">${button('native-preview', '预览示例更改', '', true)}</div>`}${state.nativePreview ? `<div class="w-surface"><p>确认更改 · ${g.title} · 演示账号</p><p>启程与探索次数将按上述旧值、新值逐项处理。</p><div class="w-row">${button('native-apply', '确认演示写入', '', true)}${button('native-cancel', '返回修改')}</div></div>` : ''}${n.message ? `<p role="status" class="w-rule">${esc(n.message)}</p>` : ''}</section>`;
+    const long = state.drafts[docKey('long')], short = state.drafts[docKey('short')];
+    return `<section><h3>发布目标检查</h3><p>${g.title} · AppID ${g.appId} · ${currentGroup().name} · ${languageName()}</p><div class="w-two"><div class="w-rich"><h3>个人长评</h3>${long.html}<div class="w-footer-preview">${currentGroup().name}</div>${button('copy', '复制长评', 'data-kind="long"')}</div><div><h3>鉴赏家短评</h3><p>${esc(short.text)}</p><p class="w-small">${Array.from(short.text).length} / 199 字 · 全文链接独立保存</p>${button('copy', '复制短评', 'data-kind="short"')}</div></div><p class="w-note w-rule">下一步由本人在 Steam 核对并提交，长短评分别记录和核验；草图没有执行发布。</p>${button('tab', '返回撰写', 'data-tab="writing"', true)}<div data-copy-result>${copyResult()}</div></section>`;
+  }
+  function render() {
+    const g = currentGame(), group = currentGroup(); savedRange = null;
+    surface.innerHTML = `<header class="w-top"><span class="w-strong">Steam Curator Hub</span><span class="w-small">交互草图 · 示例游戏与运行</span><span class="w-grow"></span>${button('account', '演示账号 · 已连接')}${button('settings', '设置')}</header>${state.account ? '<div class="w-main w-small">演示账号 · 会话已保存。真实认证仍由本人验收；这里没有登录 Steam。</div>' : ''}${state.settings ? '<div class="w-main w-small">群组尾巴在正文外独立组合；Gemini、搜索、凭据和恢复采用统一设置入口。本草图不读取或保存密钥。</div>' : ''}<div class="w-body"><aside class="w-games"><h3>我的游戏</h3>${button('search', state.search ? '收起查找' : '查找游戏')}${state.search ? '<p class="w-small w-rule">浏览查找结果保留当前编辑上下文；选择进入才切换工作台。</p>' : ''}<div class="w-rule">${games.map(item => `<button type="button" class="w-game cursor-interaction" data-action="game" data-game="${item.id}" aria-pressed="${state.game === item.id}">${item.title}<span class="w-small">${item.phase}</span></button>`).join('')}</div></aside>${divider('games', '拖拽调整游戏列表宽度')}<main class="w-main"><div class="w-row"><div class="w-grow"><h2>${g.title}</h2><p class="w-small">AppID ${g.appId} · ${group.name}</p></div><label class="w-small">文章语言 <select data-language aria-label="文章语言"><option value="schinese" ${state.language === 'schinese' ? 'selected' : ''}>简体中文</option><option value="english" ${state.language === 'english' ? 'selected' : ''}>English</option></select></label></div><nav class="w-tabs" aria-label="当前游戏的功能">${[['overview','概览与运行'],['achievements','成就 / 统计'],['writing','研究与写作'],['publication','发布准备']].map(([id,title]) => button('tab', title, `data-tab="${id}" aria-pressed="${state.tab === id}"`)).join('')}</nav>${state.tab === 'writing' ? `<div class="w-writing ${state.sourcesOpen ? 'w-open' : ''}">${authorPanel()}${state.sourcesOpen ? divider('sources', '拖拽调整资料面板宽度') + sourcePanel() : ''}</div>` : secondaryPanel()}</main></div><footer class="w-tray"><div class="w-row"><span class="w-strong">并行运行 · ${state.running.size} 款</span><span class="w-grow"></span>${button('run-details', state.runDetails ? '收起时长详情' : '时长详情')}</div>${games.filter(item => state.running.has(item.id)).map(item => `<span class="w-run"><span>${item.title}</span><span class="w-small">运行请求中</span>${button('stop', '单停', `data-game="${item.id}" aria-label="单独停止${item.title}"`)}</span>`).join('') || '<span class="w-small">没有运行中的游戏；按每款手动启动。</span>'}${state.runDetails ? `<p class="w-small w-rule">${games.filter(item => state.running.has(item.id)).map(item => `${item.title}：Steam 上次 ${item.minutes} 分钟 / 本机本次 15 分钟`).join('；')}</p>` : ''}</footer><div class="w-status" role="status" aria-live="polite">${g.title} · ${group.name} · ${languageName()} · ${kindName(state.kind)} · ${state.running.size} 款并行</div>`;
+    applyWidths();
+  }
+  function captureEditor() {
+    const editor = surface.querySelector('[data-editor]'); if (!editor) return;
+    const d = currentDraft(); d.html = state.kind === 'long' ? safeHtml(editor.innerHTML) : esc(plainText(editor).trimEnd()); d.text = plainText(editor).trimEnd(); d.revision++;
+    const save = surface.querySelector('[data-save-state]'); if (save) save.textContent = `本次草图已保留 · 版本 ${d.revision + 1}`;
+    const count = surface.querySelector('[data-count]'); if (count) count.textContent = `${Array.from(d.text).length}${state.kind === 'short' ? ' / 199 字' : ' 字'}`;
+    const warning = surface.querySelector('[data-short-warning]'); if (warning) warning.hidden = Array.from(d.text).length < 200;
+    const s = state.suggestions[docKey()], label = surface.querySelector('[data-suggestion-state]'); if (label && s && !s.applied) label.textContent = '正文已修改，建议基于旧版本';
+    const apply = surface.querySelector('[data-apply-suggestion]'); if (apply && s) apply.disabled = s.applied || s.baseRevision !== d.revision;
+    const compare = surface.querySelector('[data-compare-author]'); if (compare) compare.innerHTML = state.kind === 'long' ? d.html : esc(d.text);
+    const status = surface.querySelector('[data-compare-status]'); if (status && s && s.baseRevision !== d.revision) status.textContent = '正文已有新改动，旧建议不能直接覆盖。';
+  }
+  function rememberSelection() { const selection = window.getSelection?.(), editor = surface.querySelector('[data-editor]'); if (selection?.rangeCount && editor?.contains(selection.anchorNode) && editor.contains(selection.focusNode)) savedRange = selection.getRangeAt(0).cloneRange(); }
+  function format(command, value) {
+    const editor = surface.querySelector('[data-editor]'); if (!editor || state.kind !== 'long') return;
+    editor.focus(); const selection = window.getSelection?.();
+    if (savedRange && editor.contains(savedRange.commonAncestorContainer)) { selection.removeAllRanges(); selection.addRange(savedRange); }
+    const revision = currentDraft().revision;
+    document.execCommand('styleWithCSS', false, false); document.execCommand(command, false, value ?? null); if (currentDraft().revision === revision) captureEditor(); rememberSelection();
+  }
+  async function copyDraft(kind = state.kind) {
+    const draft = state.drafts[docKey(kind)], group = currentGroup(), g = currentGame();
+    if (kind === 'short' && Array.from(draft.text).length >= 200) { state.copyReport = { status: '短评需少于 200 字，尚未复制。', text: '', fallback: false }; }
+    else {
+      const text = bodyForCopy(draft, kind) + (kind === 'long' ? `\n\n[hr]\n[url=https://steamcommunity.com/gid/${group.id}]${group.name}[/url]` : '');
+      const report = { status: `正在复制 ${g.title} · ${kindName(kind)}…`, text, fallback: false }; state.copyReport = report;
+      try { if (!window.navigator?.clipboard?.writeText) throw new Error(); await window.navigator.clipboard.writeText(text); report.status = `已复制 ${g.title} · ${kindName(kind)}${kind === 'long' ? '，含 Steam 排版和群组尾巴。' : '，仅正文。'}`; }
+      catch { report.status = '当前预览没有剪贴板权限，可选中下面的文本手动复制。'; report.fallback = true; }
+    }
+    const output = surface.querySelector('[data-copy-result]'); if (output) output.innerHTML = copyResult();
+  }
+  surface.addEventListener('input', event => { if (event.target.closest('[data-editor]')) captureEditor(); if (event.target.matches('[data-full-url]')) state.urls[`${state.game}:${state.language}`] = event.target.value; });
+  surface.addEventListener('mouseup', rememberSelection); surface.addEventListener('keyup', rememberSelection);
+  surface.addEventListener('mousedown', event => { if (event.target.closest('[data-format],[data-action="format"],[data-action="block"]')) event.preventDefault(); });
+  surface.addEventListener('copy', event => {
+    const editor = event.target.closest?.('[data-editor]'), selection = window.getSelection?.(); if (!editor || state.kind !== 'long' || !selection?.rangeCount || selection.isCollapsed || !event.clipboardData) return;
+    const range = selection.getRangeAt(0); if (!editor.contains(range.commonAncestorContainer)) return;
+    let fragment = range.cloneContents(), ancestor = range.commonAncestorContainer.nodeType === 3 ? range.commonAncestorContainer.parentElement : range.commonAncestorContainer;
+    while (ancestor && ancestor !== editor) { if (['STRONG','B','EM','I','U','S','H1','H2','H3','BLOCKQUOTE'].includes(ancestor.tagName)) { const wrap = document.createElement(ancestor.tagName.toLowerCase()); wrap.append(fragment); fragment = wrap; } ancestor = ancestor.parentElement; }
+    const box = document.createElement('div'); box.append(fragment); event.clipboardData.setData('text/plain', [...box.childNodes].map(bbNode).join('').trim()); event.clipboardData.setData('text/html', safeHtml(box.innerHTML)); event.preventDefault();
+  });
+  surface.addEventListener('paste', event => { const editor = event.target.closest?.('[data-editor]'); if (!editor || !event.clipboardData) return; event.preventDefault(); const revision = currentDraft().revision; document.execCommand('insertText', false, event.clipboardData.getData('text/plain')); if (currentDraft().revision === revision) captureEditor(); });
+  surface.addEventListener('click', event => {
+    const link = event.target.closest('a'); if (link) event.preventDefault();
+    const control = event.target.closest('button'); if (!control || control.disabled || control.dataset.resize) return;
+    if (control.dataset.format) { format(control.dataset.format); return; }
+    const action = control.dataset.action;
+    if (action === 'format') { format(control.dataset.command); return; }
+    if (action === 'block') { format('formatBlock', control.dataset.block); return; }
+    if (action === 'copy') { copyDraft(control.dataset.kind || state.kind); return; }
+    if (action === 'close-copy') { state.copyReport = null; const output = surface.querySelector('[data-copy-result]'); if (output) output.replaceChildren(); return; }
+    if (action === 'game') { state.game = control.dataset.game; state.compare = false; state.history = false; state.copyReport = null; state.notice = ''; state.nativePreview = false; }
+    if (action === 'tab') { state.tab = control.dataset.tab; state.compare = false; state.copyReport = null; state.notice = ''; state.nativePreview = false; }
+    if (action === 'kind') { state.kind = control.dataset.kind; state.compare = false; state.history = false; state.copyReport = null; state.notice = ''; }
+    if (action === 'sources') state.sourcesOpen = !state.sourcesOpen;
+    if (action === 'source') state.source = control.dataset.source;
+    if (action === 'generate') generateSuggestion();
+    if (action === 'compare') state.compare = true;
+    if (action === 'cancel-compare') state.compare = false;
+    if (action === 'apply-suggestion') { const d = currentDraft(), s = state.suggestions[docKey()]; if (s && !s.applied && s.baseRevision === d.revision) { d.previous = { html: d.html, text: d.text }; d.text = s.text; d.html = state.kind === 'long' ? paragraphs(s.text) : esc(s.text); d.revision++; s.applied = true; state.compare = false; state.notice = '示例建议已应用，上一版作者正文已保留。'; } }
+    if (action === 'history') state.history = !state.history;
+    if (action === 'publication') { state.tab = 'publication'; state.compare = false; state.copyReport = null; }
+    if (action === 'stop') state.running.delete(control.dataset.game);
+    if (action === 'start') state.running.add(control.dataset.game);
+    if (action === 'run-details') state.runDetails = !state.runDetails;
+    if (action === 'search') state.search = !state.search;
+    if (action === 'account') state.account = !state.account;
+    if (action === 'settings') state.settings = !state.settings;
+    if (action === 'native-preview') state.nativePreview = true;
+    if (action === 'native-cancel') state.nativePreview = false;
+    if (action === 'native-apply') { const n = state.native[state.game]; state.nativePreview = false; n.unknown = scene.writeResult === 'unknown'; if (!n.unknown) n.unlocked = !n.unlocked; n.message = n.unknown ? '演示：未收到可确认结果，未自动重试；运行集合保持。' : '示例更改完成，其他游戏继续运行；真实写入仍待本人验收。'; }
+    if (action === 'acknowledge') { state.native[state.game].unknown = false; state.native[state.game].message = '演示：已重新读取并核对，没有重放上次写入。'; }
+    render(); saveView();
+  });
+  surface.addEventListener('change', event => { if (event.target.matches('[data-language]')) { state.language = event.target.value; state.compare = false; state.history = false; state.copyReport = null; state.notice = ''; render(); saveView(); } });
+  surface.addEventListener('pointerdown', event => { const handle = event.target.closest('[data-resize]'); if (!handle) return; event.preventDefault(); const kind = handle.dataset.resize, value = Number(handle.getAttribute('aria-valuenow')); drag = { handle, kind, x: event.clientX, value, pointerId: event.pointerId }; handle.setPointerCapture?.(event.pointerId); });
+  surface.addEventListener('pointermove', event => { if (!drag || event.pointerId !== drag.pointerId) return; const delta = event.clientX - drag.x; if (drag.kind === 'games') state.gamesWidth = Math.max(125, Math.min(280, drag.value + delta)); else state.sourceWidth = Math.max(180, Math.min(480, drag.value - delta)); applyWidths(); });
+  function endDrag(event) { if (!drag || event.pointerId !== drag.pointerId) return; drag.handle.releasePointerCapture?.(event.pointerId); drag = null; saveView(); }
+  surface.addEventListener('pointerup', endDrag); surface.addEventListener('pointercancel', endDrag);
+  surface.addEventListener('keydown', event => { const handle = event.target.closest('[data-resize]'); if (!handle || !['ArrowLeft','ArrowRight'].includes(event.key)) return; event.preventDefault(); const direction = event.key === 'ArrowRight' ? 20 : -20; if (handle.dataset.resize === 'games') state.gamesWidth = Math.max(125, Math.min(280, Number(handle.getAttribute('aria-valuenow')) + direction)); else state.sourceWidth = Math.max(180, Math.min(480, Number(handle.getAttribute('aria-valuenow')) - direction)); applyWidths(); saveView(); });
+  function restoreView(view) { const saved = view?.privateContent; if (Number.isFinite(saved?.gamesWidth)) state.gamesWidth = Math.max(125, Math.min(280, saved.gamesWidth)); if (Number.isFinite(saved?.sourceWidth)) state.sourceWidth = Math.max(180, Math.min(480, saved.sourceWidth)); if (typeof saved?.sourcesOpen === 'boolean') state.sourcesOpen = saved.sourcesOpen; }
+  restoreView(window.openai?.widgetState); render();
+  window.addEventListener('openai:set_globals', event => { if (event.detail?.globals?.widgetState?.modelContent?.prototype === 'SteamCuratorHub #13 live-editor') { restoreView(event.detail.globals.widgetState); applyWidths(); } });
+  if (typeof window.ResizeObserver === 'function') new window.ResizeObserver(applyWidths).observe(surface);
+  if (globalThis.Tweak) { const tweak = new Tweak({ container: root, onChange: render }); tweak.addSelect(scene, 'writeResult', { label: '演示成就写入结果', options: [{ label: '完成', value: 'complete' }, { label: '结果未知', value: 'unknown' }] }); }
+})();
+</script>
