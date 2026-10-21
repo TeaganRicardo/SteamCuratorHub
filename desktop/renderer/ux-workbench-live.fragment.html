@@ -215,7 +215,13 @@
     while (ancestor && ancestor !== editor) { if (['STRONG','B','EM','I','U','S','H1','H2','H3','BLOCKQUOTE'].includes(ancestor.tagName)) { const wrap = document.createElement(ancestor.tagName.toLowerCase()); wrap.append(fragment); fragment = wrap; } ancestor = ancestor.parentElement; }
     const box = document.createElement('div'); box.append(fragment); event.clipboardData.setData('text/plain', [...box.childNodes].map(bbNode).join('').trim()); event.clipboardData.setData('text/html', safeHtml(box.innerHTML)); event.preventDefault();
   });
-  surface.addEventListener('paste', event => { const editor = event.target.closest?.('[data-editor]'); if (!editor || !event.clipboardData) return; event.preventDefault(); const revision = currentDraft().revision; document.execCommand('insertText', false, event.clipboardData.getData('text/plain')); if (currentDraft().revision === revision) captureEditor(); });
+  surface.addEventListener('paste', event => {
+    const editor = event.target.closest?.('[data-editor]'); if (!editor || !event.clipboardData) return;
+    event.preventDefault(); const revision = currentDraft().revision;
+    const rich = event.clipboardData.getData('text/html'); let command = 'insertText', value = event.clipboardData.getData('text/plain');
+    if (rich) { const cleaned = safeHtml(rich); if (state.kind === 'long' && cleaned) { command = 'insertHTML'; value = cleaned; } else if (state.kind === 'short') { const box = document.createElement('div'); box.innerHTML = cleaned; value = plainText(box).trimEnd(); } }
+    document.execCommand(command, false, value); if (currentDraft().revision === revision) captureEditor();
+  });
   surface.addEventListener('click', event => {
     const link = event.target.closest('a'); if (link) event.preventDefault();
     const control = event.target.closest('button'); if (!control || control.disabled || control.dataset.resize) return;
