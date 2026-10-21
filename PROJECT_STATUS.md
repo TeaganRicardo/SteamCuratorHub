@@ -9,7 +9,7 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 | 工作 | 分支 / 提交 | 记录与状态 |
 | --- | --- | --- |
 | 本轮开发基线（`main`） | `ba47a2b23ef4553aa5db5594eaa4aff4a26da1c7` | [PR #17](https://github.com/TeaganRicardo/SteamCuratorHub/pull/17) 已于 2026-10-18 合并；[对应主线 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39151447941)；2026-10-21 已重新 fetch 和核实 |
-| 时长回读一致性修复 | `codex/session-lifecycle-20261021` | 修复运行中分钟数高于起点但低于上次观察值时仍继续运行的问题；PR、精确 head 与交付结果以本轮 PR 记录为准 |
+| 时长回读一致性修复 | `codex/session-lifecycle-20261021`；实现提交 `df1bec838f92aaef21619ee06a045629caa47c0e` | [PR #18](https://github.com/TeaganRicardo/SteamCuratorHub/pull/18) 修复运行中分钟数高于起点但低于上次观察值时仍继续运行的问题；最终交付 head、独立审查、构建与 CI 结果见 PR |
 | MVP 合并点（`main` 历史提交） | `731c6a1aea973f4ddf786042936b8a4f610d0a48` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 已于 2026-10-18 squash 合并；[主分支 CI 七项成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39134308435) |
 | 完整桌面 MVP 原 PR head | `3696effea408e93378aada8e71ac842f78a3926c` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 最终复审和补丁；[同 head 七项 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39134063102)；[#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10) 保留真实验收门槛 |
 | 前期 Steam 验证工具 | `ee363c01eb876005a539ee70221576a8c3696d98` | [PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9) 已先前 squash 合并；18 项测试只证明独立子实验 |
