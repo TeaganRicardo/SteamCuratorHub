@@ -1,6 +1,6 @@
 # 项目状态
 
-更新：2026-10-18。阶段：macOS arm64 桌面 MVP 已合并至 `main`；真实 Steam、发布、付费 API、视觉验收及正式分发尚未通过。
+更新：2026-10-21。阶段：macOS arm64 桌面 MVP 已合并至 `main`；正式前端正在交互收敛，真实 Steam、发布、付费 API、视觉验收及正式分发尚未通过。
 
 GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md) 为准。用户于 2026-10-17 授权全权自律开发，进一步要求推进到首版完整功能 MVP，并选择 Gemini API；仅在必要时确认需求与实现细节。未决产品选项与工程默认分别记录。
 
@@ -71,6 +71,8 @@ CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时
 #13 的正式 UI 仍冻结；本轮只修功能验证壳的登录状态反馈。#14/#15 的代码回归不替代用户真实 Steam 重验；#5/#6/#7/#10 继续保持开放，不据此标记发布候选。
 
 ## 后续顺序与真实门槛
+
+[#13](https://github.com/TeaganRicardo/SteamCuratorHub/issues/13) 的独立原型分支为 `prototype/ux-direction-20261021`，[草稿 PR #19](https://github.com/TeaganRicardo/SteamCuratorHub/pull/19) 保留各轮可操作草图与最终提交证据。用户已确认游戏工作台、正文优先且资料按需展开、可拖拽宽度、输入即排版和复制时输出 Steam 格式；[第三轮](docs/ux/round-3.md) 是这些要求的细化，[第四轮](docs/ux/round-4.md) 补齐连接、查找、任务与恢复路径供讨论。后者仍是建议，整个正式前端方向尚需用户明确确认，原型不合并为产品实现。
 
 1. [#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：首版 MVP 代码已经合并，主线 CI 全绿；等待用户执行真实 Steam、AI、发布和视觉验收再判定最终关闭。
 2. [#5](https://github.com/TeaganRicardo/SteamCuratorHub/issues/5)：用户选择至少两款拥有的 AppID，至少一个未安装且 Windows-only；验证并行分钟增长、单停、成就解锁/重锁与 INT/FLOAT 提交回调和独立回读。
