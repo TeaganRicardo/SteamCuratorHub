@@ -148,8 +148,9 @@ async function exercise(scenario) {
       const attempt = (await invoke('publication.prepare', { taskId: task.id, language: 'schinese', kind: 'long' })).value;
       await invoke('publication.open', { taskId: task.id, attemptId: attempt.id });
       let release; h.blockClear = new Promise(resolve => { release = resolve; });
-      const importing = invoke('backup.import'); await flush(() => selected);
-      chooseFile({ canceled: false, filePaths: [backupPath] }); await flush(() => h.clearStarted);
+      const checking = invoke('backup.preview'); await flush(() => selected);
+      chooseFile({ canceled: false, filePaths: [backupPath] }); const preview = await checking;
+      const importing = invoke('backup.restore', { previewId: preview.value.previewId }); await flush(() => h.clearStarted);
       const blocked = await invoke('runs.start', { taskId: task.id });
       release(); const imported = await importing;
       return { blocked: blocked.error, imported: imported.ok, runs: h.steam.runs().length,
@@ -158,13 +159,15 @@ async function exercise(scenario) {
     h.delayStart = true;
     const running = invoke('runs.start', { taskId: task.id, stopAfterMinutes: 15 });
     await flush(() => h.releaseStart);
-    const importing = invoke('backup.import'); await flush(() => selected);
+    const checking = invoke('backup.preview'); await flush(() => selected);
     if (scenario === 'backup_race') { h.releaseStart(); await running; }
     chooseFile({ canceled: false, filePaths: [backupPath] });
-    const outcome = await importing;
+    const preview = await checking;
+    const tasksBeforeRestore = (await invoke('init')).value.workspace.tasks.length;
+    const outcome = await invoke('backup.restore', { previewId: preview.value.previewId });
     if (scenario === 'backup_pending') { h.releaseStart(); await running; }
     const final = (await invoke('init')).value;
-    return { importAccepted: outcome.ok, error: outcome.error, tasks: final.workspace.tasks.length,
+    return { previewAccepted: preview.ok, tasksBeforeRestore, importAccepted: outcome.ok, error: outcome.error, tasks: final.workspace.tasks.length,
       runs: final.runs.filter(run => run.state === 'running').length };
   } finally {
     app.quit();
@@ -185,13 +188,13 @@ function run(scenario) {
 }
 const options = { skip: typeof modules.registerHooks !== 'function' };
 
-test('actual main rejects backup import if a previously pending run starts during the dialog', options, () => {
+test('actual main previews without writes and rejects restore if a pending run starts during selection', options, () => {
   const result = run('backup_race');
-  assert.deepEqual(result, { importAccepted: false, error: 'stop_operations_before_import', tasks: 1, runs: 1 });
+  assert.deepEqual(result, { previewAccepted: true, tasksBeforeRestore: 1, importAccepted: false, error: 'stop_operations_before_import', tasks: 1, runs: 1 });
 });
 test('actual main also rejects import while run preflight remains pending at the final gate', options, () => {
   const result = run('backup_pending');
-  assert.deepEqual(result, { importAccepted: false, error: 'stop_operations_before_import', tasks: 1, runs: 1 });
+  assert.deepEqual(result, { previewAccepted: true, tasksBeforeRestore: 1, importAccepted: false, error: 'stop_operations_before_import', tasks: 1, runs: 1 });
 });
 test('actual main maintenance lock rejects new business commands while publication storage clears', options, () => {
   const result = run('maintenance');

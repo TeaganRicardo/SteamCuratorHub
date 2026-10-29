@@ -5,7 +5,7 @@ export class AppController {
   constructor({ workspace, steam, native, research, secrets, publishing, onEvent, fixture = false }) {
     Object.assign(this, { workspace, steam, native, research, secrets, publishing, onEvent, fixture });
     this.epoch = 0; this.researchRequests = new Map(); this.previews = new Map(); this.lastGeneration = null; this.nativeOperations = 0; this.maintenance = false; this.inFlight = new Map();
-    this.runCheckpoints = new Map();
+    this.runCheckpoints = new Map(); this.reconciliations = new Map();
   }
   snapshot() { return { workspace: this.workspace.snapshot(), steam: this.steam.status(), runs: this.steam.runs(),
     credentials: this.secrets.status(), fixture: this.fixture, version: '0.1.0' }; }
@@ -26,7 +26,7 @@ export class AppController {
     }
     if (event.type === 'steam.status' && event.data.generation !== this.lastGeneration) {
       this.lastGeneration = event.data.generation; this.epoch++;
-      for (const request of this.researchRequests.values()) request.abort(); this.researchRequests.clear(); this.previews.clear();
+      for (const request of this.researchRequests.values()) request.abort(); this.researchRequests.clear(); this.previews.clear(); this.reconciliations.clear();
       this.publishing.logout().catch(() => {});
     }
     if (event.type === 'steam.status' && event.data.state === 'connected' && event.data.steamId &&
@@ -64,7 +64,7 @@ export class AppController {
   }
   acquireMaintenance() {
     if (this.maintenance) throw new Error('workspace_maintenance_in_progress');
-    this.assertIdle(); this.maintenance = true; this.epoch++; this.previews.clear();
+    this.assertIdle(); this.maintenance = true; this.epoch++; this.previews.clear(); this.reconciliations.clear();
     return () => { this.maintenance = false; };
   }
   async invoke(command, payload = {}) {
@@ -79,7 +79,7 @@ export class AppController {
       case 'account.bind': {
         const id = steamId(payload.steamId);
         if (this.steam.status().state === 'connected' && this.steam.status().steamId !== id) throw new Error('logout_before_binding_another_account');
-        const bindingEpoch = ++this.epoch; this.previews.clear();
+        const bindingEpoch = ++this.epoch; this.previews.clear(); this.reconciliations.clear();
         for (const request of this.researchRequests.values()) request.abort();
         await this.publishing.logout();
         if (bindingEpoch !== this.epoch) throw new Error('operation_context_changed');
@@ -90,7 +90,7 @@ export class AppController {
       case 'steam.restore': return this.steam.restore();
       case 'steam.guard': return this.steam.submitGuard(payload.code);
       case 'steam.logout': {
-        this.epoch++; for (const request of this.researchRequests.values()) request.abort(); this.previews.clear();
+        this.epoch++; for (const request of this.researchRequests.values()) request.abort(); this.previews.clear(); this.reconciliations.clear();
         const result = await this.steam.logout(); await this.publishing.logout(); this.changed(); return result;
       }
       case 'steam.library': return this.steam.ownedGames();
@@ -160,15 +160,33 @@ export class AppController {
           this.workspace.recordOperation(context.task.id, context.owner, operation); this.changed(); throw error;
         }
       }
+      case 'stats.reconcile': {
+        const context = this.taskContext(payload.taskId);
+        const operation = context.task.operations?.find(op => op.id === payload.operationId);
+        if (!operation || operation.state !== 'outcome_unknown') throw new Error('unknown_operation_not_found');
+        const fingerprint = JSON.stringify(operation);
+        const readback = await this.withNative(() => this.native.read({ appId: context.task.appId })); this.assertContext(context);
+        if (readback.accountId !== context.owner) throw new Error('native_steam_account_mismatch');
+        const current = this.workspace.task(context.task.id).operations?.find(op => op.id === operation.id);
+        if (JSON.stringify(current) !== fingerprint) throw new Error('operation_context_changed');
+        for (const [id, value] of this.reconciliations) if (value.operationId === operation.id && value.taskId === context.task.id) this.reconciliations.delete(id);
+        const reconciliationId = randomUUID();
+        this.reconciliations.set(reconciliationId, { taskId: context.task.id, operationId: operation.id,
+          owner: context.owner, epoch: context.epoch, fingerprint, readback });
+        return { readback, reconciliationId };
+      }
       case 'stats.acknowledge': {
         const context = this.taskContext(payload.taskId);
         const operation = context.task.operations?.find(op => op.id === payload.operationId);
         if (!operation || operation.state !== 'outcome_unknown') throw new Error('unknown_operation_not_found');
-        const readback = await this.withNative(() => this.native.read({ appId: context.task.appId })); this.assertContext(context);
-        if (readback.accountId !== context.owner) throw new Error('native_steam_account_mismatch');
+        const reconciliation = this.reconciliations.get(payload.reconciliationId);
+        if (!reconciliation || reconciliation.taskId !== context.task.id || reconciliation.operationId !== operation.id ||
+            reconciliation.owner !== context.owner || reconciliation.epoch !== context.epoch ||
+            reconciliation.fingerprint !== JSON.stringify(operation)) throw new Error('native_reconciliation_readback_required');
+        const readback = reconciliation.readback;
         this.workspace.recordOperation(context.task.id, context.owner, { ...operation, state: 'operator_acknowledged',
-          acknowledgement: 'User requested fresh readback and acknowledged the uncertain prior result.', readback,
-          updatedAt: new Date().toISOString() }); this.changed(); return readback;
+          acknowledgement: 'User inspected the separate fresh readback and acknowledged the uncertain prior result.', readback,
+          updatedAt: new Date().toISOString() }); this.reconciliations.delete(payload.reconciliationId); this.changed(); return readback;
       }
       case 'research.cancel':
         for (const [id, controller] of this.researchRequests) if (id === payload.taskId || id.startsWith(`${payload.taskId}:`)) controller.abort();
@@ -246,7 +264,7 @@ export class AppController {
     }
   }
   async close() {
-    this.epoch++; for (const controller of this.researchRequests.values()) controller.abort(); this.previews.clear();
+    this.epoch++; for (const controller of this.researchRequests.values()) controller.abort(); this.previews.clear(); this.reconciliations.clear();
     await Promise.allSettled([this.steam.close(), this.native.close(), this.publishing.close()]);
   }
 }

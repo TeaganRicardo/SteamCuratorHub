@@ -1,6 +1,6 @@
 # 项目状态
 
-更新：2026-10-29。阶段：macOS arm64 桌面 MVP、P0 会话/并行操作与时长回读一致性修复已合并；正式界面等待整套交互方向确认；真实 Steam、发布、付费 API、视觉验收及正式分发尚未通过。
+更新：2026-10-29。阶段：macOS arm64 桌面 MVP、P0 会话/并行操作与时长回读一致性修复已合并；正式界面按已确认的第四轮方向实现与验证；真实 Steam、发布、付费 API、视觉验收及正式分发尚未通过。
 
 GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md) 为准。用户于 2026-10-17 授权全权自律开发，进一步要求推进到首版完整功能 MVP，并选择 Gemini API；仅在必要时确认需求与实现细节。未决产品选项与工程默认分别记录。
 
@@ -8,10 +8,11 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 
 | 工作 | 分支 / 提交 | 记录与状态 |
 | --- | --- | --- |
-| 本轮源码基线（`main`） | `e53a9022067209d600ef8ab5b5c4daed61e6cb73` | [PR #18](https://github.com/TeaganRicardo/SteamCuratorHub/pull/18) 已于 2026-10-29 合并；与最终 PR head 的源码树一致；[对应主线七项 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/40925317522) |
+| 本轮源码基线（`main`） | `21aeb3e8f6baffb57ea439d783bff943add2408f` | [PR #20](https://github.com/TeaganRicardo/SteamCuratorHub/pull/20) 已合并用户确认需求与交付状态；生产代码承接 [PR #18](https://github.com/TeaganRicardo/SteamCuratorHub/pull/18) 的时长修复 |
+| 正式游戏工作台 | `codex/formal-workbench-20261029` | [实施范围](docs/ux/implementation.md)已按用户最终确认接入生产服务，验证与独立复核进行中 |
 | 会话与并行操作修复（`main` 历史提交） | `ba47a2b23ef4553aa5db5594eaa4aff4a26da1c7` | [PR #17](https://github.com/TeaganRicardo/SteamCuratorHub/pull/17) 已于 2026-10-18 合并；[对应主线 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39151447941) |
 | 时长回读一致性修复 | 最终 PR head `60ddf0d540426e300b02889a4e298c46f9403b2b` | [PR #18](https://github.com/TeaganRicardo/SteamCuratorHub/pull/18) 已合并；修复、独立审查、本机构建与[七项 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39631664594)均对应此 head |
-| 正式前端交互原型 | `prototype/ux-direction-20261021`；`7056f19d4aacd4dcdfffe88cd91ffc9a2dc0c388` | [草稿 PR #19](https://github.com/TeaganRicardo/SteamCuratorHub/pull/19) 保留可操作草图与验证记录；已确认结构与待确认流程分别记录，正式前端尚未实现 |
+| 正式前端交互原型 | `prototype/ux-direction-20261021`；`7056f19d4aacd4dcdfffe88cd91ffc9a2dc0c388` | [草稿 PR #19](https://github.com/TeaganRicardo/SteamCuratorHub/pull/19) 保留可操作草图与历史验证记录；2026-10-29 整套方向已获确认，正式实现另见本轮分支 |
 | MVP 合并点（`main` 历史提交） | `731c6a1aea973f4ddf786042936b8a4f610d0a48` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 已于 2026-10-18 squash 合并；[主分支 CI 七项成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39134308435) |
 | 完整桌面 MVP 原 PR head | `3696effea408e93378aada8e71ac842f78a3926c` | [PR #11](https://github.com/TeaganRicardo/SteamCuratorHub/pull/11) 最终复审和补丁；[同 head 七项 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39134063102)；[#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10) 保留真实验收门槛 |
 | 前期 Steam 验证工具 | `ee363c01eb876005a539ee70221576a8c3696d98` | [PR #9](https://github.com/TeaganRicardo/SteamCuratorHub/pull/9) 已先前 squash 合并；18 项测试只证明独立子实验 |
@@ -26,7 +27,7 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - 同账号多 AppID 并行协议运行、单停、本次期限与累计目标；Steam 总分钟回读、本机 elapsed 和运行历史分别记录，异常停止不自动续跑。
 - 成就搜索/筛选/全球百分比/排序，单项及批量解锁/重锁，INT/FLOAT 统计修改；预览、账号/库 digest/旧值校验、Store 回调及独立进程回读，逐项保留 failed/unknown。
 - Steam 评论样本、Brave 名称搜索与实际媒体取文、来源身份/覆盖状态；Gemini 生成研究摘要和建议稿，翻译、短评摘要及 BBCode 排版。只有 Gemini 是 AI 供应商；Brave 是独立搜索工程选型。
-- 中英文文章草稿、版本冲突处理、BBCode 原文/预览、可编辑群组尾巴、纯文本短评与独立全文链接；AI 建议不会静默覆盖手改草稿。
+- 中英文文章草稿、版本冲突处理、直接排版编辑与复制时输出 Steam BBCode、可编辑群组尾巴、纯文本短评与独立全文链接；AI 建议不会静默覆盖手改草稿。
 - 独立 Steam 网页会话、冻结发布内容与账号/目标校验、辅助填表；本人提交、结果 URL、人工确认与长评 API 回读核验分别记账。鉴赏家直接提交未实现为无条件能力。
 - 本机有界 JSON 工作区、系统加密或会话内凭据、备份导出/恢复、损坏文件恢复路径；Electron fixture smoke 与 arm64 ad-hoc 打包脚本。
 
@@ -84,7 +85,7 @@ CI 保留 macOS / Windows / Linux × Node 22 / 24 的离线语法、测试与时
 
 ## 后续顺序与真实门槛
 
-[#13](https://github.com/TeaganRicardo/SteamCuratorHub/issues/13) 的用户确认已覆盖游戏工作台、正文优先且资料按需展开、可拖拽宽度、输入即排版和复制时输出 Steam 格式。后续连接、查找、任务与恢复路径见 [PR #19 的流程草案](https://github.com/TeaganRicardo/SteamCuratorHub/blob/7056f19d4aacd4dcdfffe88cd91ffc9a2dc0c388/docs/ux/round-4.md)，仍待整套方向确认后进入正式前端实现。原型的 35 项模块语法检查、241/241 离线测试和[七项 CI](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39647880806)均已通过；原型与主线修复分别验证。
+[#13](https://github.com/TeaganRicardo/SteamCuratorHub/issues/13) 的用户确认已覆盖游戏工作台、正文优先且资料按需展开、可拖拽宽度、输入即排版和复制时输出 Steam 格式。用户于 2026-10-29 明确回复“已确认，继续”，授权按整套方向开始正式实现。后续连接、查找、任务与恢复路径见 [PR #19 的流程草案](https://github.com/TeaganRicardo/SteamCuratorHub/blob/7056f19d4aacd4dcdfffe88cd91ffc9a2dc0c388/docs/ux/round-4.md)，正式实现使用独立分支 `codex/formal-workbench-20261029`，范围和验证记录见[实施说明](docs/ux/implementation.md)。原型的 35 项模块语法检查、241/241 离线测试和[七项 CI](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39647880806)均已通过；原型与主线修复分别验证。
 
 1. [#10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)：首版 MVP 代码已经合并，主线 CI 全绿；等待用户执行真实 Steam、AI、发布和视觉验收再判定最终关闭。
 2. [#5](https://github.com/TeaganRicardo/SteamCuratorHub/issues/5)：用户选择至少两款拥有的 AppID，至少一个未安装且 Windows-only；验证并行分钟增长、单停、成就解锁/重锁与 INT/FLOAT 提交回调和独立回读。

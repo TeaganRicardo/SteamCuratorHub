@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { publicHttps } from './workspace.mjs';
+import { BackupRestore } from './backup.mjs';
 import { openWorkspace } from './recovery.mjs';
 import { SecretStore } from './secrets.mjs';
 import { SteamService } from './services/steam.mjs';
@@ -33,7 +34,7 @@ function safeError(error) {
 function emit(event) { if (window && !window.isDestroyed()) window.webContents.send('hub:event', event); }
 async function start() {
   const root = app.getAppPath();
-  const assets = new Map(['index.html', 'app.mjs', 'style.css', 'bbcode.mjs'].map(name => [`/${name}`, join(root, 'desktop', 'renderer', name)]));
+  const assets = new Map(['index.html', 'app.mjs', 'style.css', 'bbcode.mjs', 'rich-text.mjs'].map(name => [`/${name}`, join(root, 'desktop', 'renderer', name)]));
   protocol.handle('hub', request => {
     const url = new URL(request.url);
     const path = url.hostname === 'app' ? assets.get(url.pathname) : null;
@@ -52,6 +53,7 @@ async function start() {
   const research = fixture ? new DemoResearchService() : new ResearchService();
   const publishing = new PublishingService({ BrowserWindow, session, workspace, onEvent: emit });
   controller = new AppController({ workspace, steam, native, research, secrets, publishing, onEvent: emit, fixture });
+  const backup = new BackupRestore({ workspace, controller, publishing });
   if (fixture && !workspace.state.activeSteamId) {
     workspace.bindAccount('76561198000000000');
     const task = workspace.createTask({ appId: 1001, title: '示例：星海旅人', groupId: '45134494', targetMinutes: 120 });
@@ -59,7 +61,7 @@ async function start() {
     workspace.saveDraft({ taskId: task.id, language: 'schinese', kind: 'short', text: '一段以探索和叙事为核心的示例旅程，适合希望慢下来发掘细节的玩家。', expectedRevision: 0 });
   }
   window = new BrowserWindow({ width: 1440, height: 950, minWidth: 1050, minHeight: 720, title: fixture ? 'Steam Curator Hub · 演示模式' : 'Steam Curator Hub',
-    backgroundColor: '#0e1420', titleBarStyle: 'hiddenInset', show: !smoke,
+    backgroundColor: '#0e1420', titleBarStyle: 'default', show: !smoke,
     webPreferences: { preload: join(root, 'desktop', 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
   window.on('close', event => { if (!quitting) { event.preventDefault(); app.quit(); } });
   window.webContents.on('render-process-gone', () => {
@@ -90,24 +92,17 @@ async function start() {
         const selection = await dialog.showSaveDialog(window, { title: '导出工作区备份（不含凭据）', defaultPath: `steam-curator-hub-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
         if (selection.canceled) value = { cancelled: true };
         else { writeFileSync(selection.filePath, JSON.stringify(workspace.exportBackup(), null, 2), { mode: 0o600 }); value = { exported: true }; }
-      } else if (command === 'backup.import') {
-        if (steam.runs().some(run => run.state === 'running') || controller.researchRequests.size || workspace.snapshot().tasks.some(task => task.operations?.some(op => op.state === 'applying'))) throw new Error('stop_operations_before_import');
-        const selection = await dialog.showOpenDialog(window, { title: '导入工作区备份', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+      } else if (command === 'backup.preview') {
+        const selection = await dialog.showOpenDialog(window, { title: '检查工作区备份', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
         if (selection.canceled) value = { cancelled: true };
         else {
           if (statSync(selection.filePaths[0]).size > 20_000_000) throw new Error('workspace_too_large');
-          const raw = readFileSync(selection.filePaths[0], 'utf8'); if (Buffer.byteLength(raw) > 20_000_000) throw new Error('workspace_too_large');
-          const decision = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '导入并替换'], defaultId: 0, cancelId: 0,
-            message: '用备份替换当前工作区？', detail: '当前数据保留为本机 previous 备份。凭据不会导入，发布成功记录需重新核实。' });
-          if (decision.response !== 1) value = { cancelled: true };
-          else {
-            const release = controller.acquireMaintenance();
-            try {
-              await publishing.logout(); controller.assertIdle();
-              workspace.importBackup(JSON.parse(raw)); emit({ type: 'workspace.changed' }); value = controller.snapshot();
-            } finally { release(); }
-          }
+          const raw = readFileSync(selection.filePaths[0], 'utf8');
+          if (Buffer.byteLength(raw) > 20_000_000) throw new Error('workspace_too_large');
+          value = backup.preview(JSON.parse(raw));
         }
+      } else if (command === 'backup.restore') {
+        value = await backup.restore(payload.previewId);
       } else value = await controller.invoke(command, payload);
       return { ok: true, value };
     } catch (error) { return safeError(error); }
@@ -140,20 +135,44 @@ async function runSmoke(win, application) {
       await window.hub.invoke('runs.stop', {appId:second.appId});
       const research = await window.hub.invoke('research.run', {taskId:task.id,language:'schinese'});
       const attempt = await window.hub.invoke('publication.prepare', {taskId:task.id,language:'schinese',kind:'short'});
-      const tabs = [...document.querySelectorAll('[data-tab]')].map(node => node.dataset.tab);
-      const headings={library:'游戏库',tasks:'评测任务',runs:'运行与时长',achievements:'成就与统计',research:'资料研究',editor:'评测编辑',settings:'设置'};
-      for(const name of Object.keys(headings)) {
-        const button=document.querySelector('[data-tab="'+name+'"]'); if(!button)throw new Error('missing_tab_'+name);button.click();
-        await new Promise(resolve=>setTimeout(resolve,10));
-        if(document.querySelector('#main h1')?.textContent!==headings[name])throw new Error('tab_render_failed_'+name);
-      }
+      const waitFor=async(check,reason)=>{for(let step=0;step<100;step++){if(await check())return;await new Promise(resolve=>setTimeout(resolve,20));}throw new Error(reason);};
+      const headings={runs:'运行与时长',achievements:'成就与统计',editor:'研究与写作',publication:'发布准备',library:'查找游戏',settings:'设置'};
+      const navigate=async(name)=>{const button=document.querySelector('[data-tab="'+name+'"]');if(!button)throw new Error('missing_section_'+name);button.click();await waitFor(()=>document.querySelector('#main h1')?.textContent===headings[name],'section_render_failed_'+name);};
+      for(const name of Object.keys(headings)){await navigate(name);if(!document.querySelector('#run-tray'))throw new Error('missing_run_tray');}
+      await navigate('editor');
+      const editor=document.querySelector('[contenteditable="true"][aria-label="个人长评正文"]');
+      if(!editor||!editor.querySelector('h2')||editor.textContent.includes('[h2]'))throw new Error('rich_editor_not_formatted');
+      editor.append(document.createTextNode(' Smoke author edit'));
+      editor.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:' Smoke author edit'}));
+      [...document.querySelectorAll('button')].find(node=>node.textContent==='立即保存').click();
+      await waitFor(async()=> (await window.hub.invoke('init')).workspace.tasks.find(row=>row.id===task.id).drafts.schinese.long.text.includes('Smoke author edit'),'rich_draft_not_saved');
+      const choose=async(id)=>{const node=document.querySelector('.game-choice[data-task-id="'+id+'"]');if(!node)throw new Error('missing_game_choice');node.click();await waitFor(()=>document.querySelector('.game-choice[data-task-id="'+id+'"]').getAttribute('aria-pressed')==='true','game_choice_failed');};
+      await choose(second.id);await choose(task.id);
+      if(!document.querySelector('[aria-label="个人长评正文"]').textContent.includes('Smoke author edit'))throw new Error('draft_context_lost');
+      const sourceButton=[...document.querySelectorAll('button')].find(node=>node.textContent==='查看资料与建议');sourceButton.click();
+      await waitFor(()=>document.querySelector('.sources-pane'),'sources_drawer_failed');
+      if(!document.querySelector('[role="separator"][aria-label="调整资料宽度"]'))throw new Error('missing_sources_resize');
+      const tabs=Object.keys(headings);
       const state = await window.hub.invoke('init');
       return {tabs,runState:run.state,concurrentRuns:concurrent.length,nativeApplyDuringRun:applied.verification.scope,singleStopRemaining:remaining.length,nativeSource:native.source,achievements:native.achievements.length,
         researchSources:research.sources.length,shortCount:Array.from(attempt.text).length,
         persistedTasks:state.workspace.tasks.length,hasNode:typeof process!=='undefined',
-        title:document.title,bodyTextLength:document.body.textContent.length};
+        richDraftSaved:true,gameSwitchRetainedDraft:true,sourcesDrawer:true,persistentRunTray:true,title:document.title,bodyTextLength:document.body.textContent.length};
     })()`);
     if (value.hasNode || value.shortCount >= 200 || !value.achievements || !value.researchSources) throw new Error('smoke_assertion_failed');
+    win.setSize(1050, 720);
+    value.narrowLayout = await win.webContents.executeJavaScript(`(async () => {
+      await new Promise(requestAnimationFrame);
+      for (const label of ['调整游戏列表宽度','调整资料宽度']) {
+        document.querySelector('[role="separator"][aria-label="'+label+'"]').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
+      }
+      await new Promise(requestAnimationFrame);
+      const main=document.querySelector('#main'), layout=document.querySelector('.writing-layout');
+      const writer=layout.querySelector('.writer').getBoundingClientRect(), sources=layout.querySelector('.sources-pane').getBoundingClientRect();
+      const tray=document.querySelector('#run-tray').getBoundingClientRect(), rail=document.querySelector('.game-rail').getBoundingClientRect();
+      if(layout.scrollWidth>layout.clientWidth+1 || main.scrollWidth>main.clientWidth+1 || sources.top<writer.bottom || rail.width!==300 || tray.top<0 || tray.bottom>innerHeight) throw new Error('narrow_layout_failed');
+      return {width:innerWidth,height:innerHeight,sourcesStacked:true,noHorizontalOverflow:true,persistentRunTray:true};
+    })()`);
     result.checks = value; result.status = 'passed';
   } catch (error) { result.status = 'failed'; result.error = safeError(error).error; process.exitCode = 1; }
   if (output) { mkdirSync(resolve(output, '..'), { recursive: true }); writeFileSync(output, JSON.stringify(result, null, 2)); }

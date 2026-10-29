@@ -1,8 +1,9 @@
-import { renderBBCode } from './bbcode.mjs';
+import { createRichEditor, renderRichText } from './rich-text.mjs';
 
 const $ = selector => document.querySelector(selector);
-const main = $('#main');
-const tabs = [ ['library','▦','游戏库'], ['tasks','▤','评测任务'], ['runs','▷','运行与时长'], ['achievements','◇','成就与统计'], ['research','⌕','资料研究'], ['editor','✎','评测编辑'], ['settings','⚙','设置'] ];
+let main = $('#main');
+const workspaceMain = main;
+const tabs = [['runs','概览与运行'],['achievements','成就 / 统计'],['editor','研究与写作'],['publication','发布准备']];
 const labels = { connected:'已连接', logged_out:'未连接', logging_in:'正在验证登录', restoring:'正在恢复已保存会话', reconnecting:'正在重新连接', guard_required:'等待 Steam Guard', error:'连接未完成', closed:'已关闭',
   running:'运行请求中', stopped:'已请求停止', paused:'已暂停', unknown:'待核实', outcome_unknown:'结果未知', verified:'已回读核实', failed:'失败',
   prepared:'已准备', filled:'已填入页面', submitted_unknown:'提交结果待核实', user_confirmed:'用户已确认', imported_unverified:'导入记录待核实',
@@ -25,8 +26,21 @@ const errors = {
 };
 Object.assign(errors,{credential_store_unreadable:'本机凭据文件不可读。任务与草稿仍可使用，请到设置恢复凭据。',credential_store_corrupt:'本机凭据文件损坏。任务与草稿仍可使用，请到设置恢复凭据。',credential_decryption_failed:'系统未能解密凭据，请检查本机系统密钥链。',credential_store_write_failed:'凭据保存失败，原密钥仍保留。请检查本机磁盘与权限后重试。',credential_store_reset_failed:'凭据归档失败，原文件仍保留。请检查本机磁盘与权限。',configuration_save_incomplete:'设置未完整保存，请检查磁盘权限并重新填写凭据配置。',full_review_url_requires_numeric_profile:'请使用 steamcommunity.com/profiles/SteamID64/recommended/AppID/ 格式的个人评测链接，账号与游戏须对应当前任务。'});
 Object.assign(errors,{steam_credentials_rejected:'Steam 拒绝了登录凭据，请检查账号和密码后重试。',steam_auth_required:'已保存会话已失效或需要重新授权，请重新登录。',steam_session_expired:'已保存会话已过期，请重新登录。',invalid_steam_session:'已保存会话不可用，请重新登录。',steam_reconnect_exhausted:'自动重连已达到本次上限，请检查网络后重试恢复连接。',steam_disconnected:'Steam 连接已断开。',steam_error:'Steam 未能完成连接，请检查网络后重试。',steam_session_conflict:'Steam 报告其他登录会话冲突，请检查账号会话后重试。',login_timeout:'Steam 登录等待超时，请检查网络后重试。',login_failed:'Steam 登录请求未完成，请重试。',steam_session_save_failed:'会话未能加密保存，本次连接仍可使用；下次启动可能需要重新登录。',credential_store_changed_retry:'会话或密钥刚刚更新，请重试保存设置。'});
+Object.assign(errors,{native_reconciliation_readback_required:'请先重新读取未知结果，核对回读后再确认。',backup_preview_changed:'当前工作区在比较后已变化，请重新选择备份并比较。',backup_preview_expired:'此次备份比较已失效，请重新选择备份。',result_url_required:'请粘贴实际发布结果链接后再记录确认。'});
 let state;
-let activeTab = 'library';
+let activeTab = 'editor';
+let editorKind = 'long';
+let sourcesOpen = false;
+let railWidth = 200;
+let sourcesWidth = 320;
+let authReauthenticate = false;
+let logoutConfirmation = false;
+let searchDetail = null;
+let newTaskGame = null;
+let backupPreview = null;
+const reconciliations = new Map();
+const publicationInputs = new Map();
+const publicationViews = new WeakMap();
 let taskId = null;
 let language = 'schinese';
 let library = [];
@@ -47,13 +61,13 @@ let toastTimer;
 let refreshSequence = 0;
 let uiEpoch = 0;
 let nativeReadSequence = 0;
-let authDialogVisible = false;
 let authAttempt = 0;
 let authAccountName = '';
 let authError = '';
 const buffers = new Map();
 const suggestions = new Map();
 const busyTasks = new Set();
+const aiTasks = new Map();
 function researchWarning(value){
   const messages={ai_not_configured:'尚未配置 Gemini 密钥或模型，已保存取得的资料。',missing_search_configuration:'尚未配置 Brave 搜索密钥，本次没有站外媒体资料。',media_coverage_incomplete:'媒体资料覆盖不足，生成内容仅可依据已取得的来源。',steam_reviews_empty:'未取得 Steam 评论样本。',steam_review_sample_limited:'Steam 评论仅为有界样本，不代表所有玩家观点。',insufficient_evidence:'可用资料不足，未生成初稿。',media_discovery_no_sources:'本次检索未找到可读取的媒体来源。',steam_review_context_truncated:'Steam 评论样本已按上下文上限截取。'};
   if(messages[value])return messages[value];
@@ -117,38 +131,62 @@ async function refresh(renderView = true) {
   const next = await window.hub.invoke('init');
   if (sequence !== refreshSequence) return;
   const ownerChanged = state?.workspace.activeSteamId !== next.workspace.activeSteamId;
-  if (ownerChanged) { uiEpoch++; nativeSnapshot = null; nativeTaskId = null; suggestions.clear(); resetCatalog(); }
+  if (ownerChanged) { uiEpoch++; nativeSnapshot = null; nativeTaskId = null; suggestions.clear(); reconciliations.clear(); publicationInputs.clear(); backupPreview=null; document.querySelector('.backup-comparison')?.remove(); resetCatalog(); }
   state = next;
   if (!state.workspace.tasks.some(item => item.id === taskId)) taskId = state.workspace.tasks.find(item => item.status === 'active')?.id ?? state.workspace.tasks[0]?.id ?? null;
   renderTop(); if (ownerChanged ? activeTab !== 'settings' : renderView) render();
 }
-async function navigate(tab) { await flushAll(); activeTab = tab; renderTop(); render(); }
+async function navigate(tab) { await flushAll(); activeTab=tab; renderTop(); render(); }
 async function chooseTask(id) {
   await flushAll();
+  if(['library','settings','account'].includes(activeTab))activeTab='editor';
   if (taskId && taskId !== id) window.hub.invoke('research.cancel', { taskId }).catch(() => {});
-  uiEpoch++; taskId = id; nativeSnapshot = null; nativeTaskId = null; selectedAchievements.clear(); statChanges.clear(); renderTop(); render();
+  uiEpoch++; reconciliations.clear(); taskId = id; nativeSnapshot = null; nativeTaskId = null; selectedAchievements.clear(); statChanges.clear(); renderTop(); render();
 }
 function renderTop() {
-  $('#navigation').replaceChildren(...tabs.map(([id, icon, title]) => {
-    const node = button('', () => navigate(id), `nav-item${activeTab === id ? ' active' : ''}`);
-    node.dataset.tab = id; node.append(h('span', { class: 'nav-icon' }, icon), title); return node;
+  $('#navigation').replaceChildren(...tabs.map(([id,title]) => {
+    const node = button(title, () => navigate(id), `nav-item${activeTab === id ? ' active' : ''}`);
+    node.dataset.tab = id; node.setAttribute('aria-pressed',String(activeTab===id)); return node;
   }));
-  const status = state.steam;
-  $('#account-status').replaceChildren(h('div', { class: 'account-name' }, h('span', { class: `status-dot ${status.state}` }), state.fixture ? '演示工作区' : status.displayName || labels[status.state] || status.state),
-    h('div', { class: 'account-id' }, state.workspace.activeSteamId || '未绑定 SteamID'));
-  $('#account-button').textContent = status.state === 'connected' ? '账号与连接' : ['logging_in','restoring','reconnecting','guard_required'].includes(status.state) ? '查看登录进度' : '连接 Steam';
-  $('#mode-label').textContent = state.fixture ? '演示模式 · 合成数据，不连接 Steam' : '个人鉴赏家工作台';
-  $('#task-picker').replaceChildren(h('option', { value: '' }, '选择评测任务'), ...state.workspace.tasks.map(item => h('option', { value: item.id }, `${item.title} · ${item.appId}`)));
-  $('#task-picker').value = taskId ?? '';
-  $('#language-picker').value = language;
-  const running = state.runs.filter(run => run.state === 'running').length;
-  $('#statusbar').replaceChildren(h('span', {}, `${status.accountName ? `${status.accountName} · ` : ''}${labels[status.state] ?? status.state}${status.error ? `：${errors[status.error] ?? status.error}` : ''} · ${running} 款运行中`), h('span', {}, `文章：${language === 'schinese' ? '简体中文' : 'English'}`),
-    h('span', { class: 'spacer' }), h('span', {}, state.fixture ? '所有运行和写入结果仅为演示' : '工作区与凭据分别保存在本机'));
+  const status=state.steam, current=task();
+  $('#account-status').replaceChildren(h('span',{class:`status-dot ${status.state}`}),h('span',{},`${status.accountName||status.displayName||'Steam'} · ${labels[status.state]||status.state}`),h('span',{class:'account-id'},state.workspace.activeSteamId||'未绑定账号'));
+  $('#account-button').textContent=['logging_in','restoring','reconnecting','guard_required'].includes(status.state)?'查看连接进度':status.state==='connected'?'账号与连接':'连接 Steam';
+  $('#mode-label').textContent=state.fixture?'演示工作台 · 合成数据':'Steam Curator Hub';
+  $('#task-picker').replaceChildren(h('option',{value:''},'选择游戏'),...state.workspace.tasks.map(item=>h('option',{value:item.id},`${item.title} · ${item.appId}`)));
+  $('#task-picker').value=taskId??''; $('#language-picker').value=language;
+  $('#game-context').replaceChildren(h('div',{},h('h1',{},current?.title||'你的游戏工作台'),h('p',{class:'muted'},current?`AppID ${current.appId} · ${group()?.name||'未设置群组'}`:'选择游戏，开始运行、研究与写作')));
+  $('#game-list').replaceChildren(...state.workspace.tasks.map(item=>{
+    const node=button('',()=>chooseTask(item.id),`game-choice${item.id===taskId?' active':''}`);node.dataset.taskId=item.id;node.setAttribute('aria-pressed',String(item.id===taskId));
+    node.append(h('strong',{},item.title),h('span',{},`${state.workspace.groups.find(g=>g.id===item.groupId)?.name||''} · ${labels[item.status]||item.status}`));return node;
+  }));
+  if(!state.workspace.tasks.length)$('#game-list').append(h('p',{class:'inline-note'},'从游戏库或商店添加第一款游戏。'));
+  const connection=$('#connection-banner');
+  connection.replaceChildren(h('span',{},`${labels[status.state]||status.state}${status.state==='reconnecting'?` ${status.attempt??0}/${status.maxAttempts??3}`:''}`),h('span',{},status.error?(errors[status.error]||status.error):status.state==='connected'?(status.persistence==='encrypted'?'会话已加密保存':'当前连接可用'):['restoring','reconnecting'].includes(status.state)?'运行已中断，连接恢复后由你手动开启。':'连接后可读取 Steam 库与累计时长。'),button('连接详情',connectDialog,'small subtle'));
+  renderRunTray();
+  $('#statusbar').replaceChildren(h('span',{},`${current?.title||'未选择游戏'} · ${group()?.name||'未设置群组'}`),h('span',{},`文章：${language==='schinese'?'简体中文':'English'}`),h('span',{class:'spacer'}),h('span',{},state.fixture?'合成数据 · 不连接 Steam':'本地工作区'));
+}
+function renderRunTray(){
+  const runs=state.runs, running=runs.filter(run=>run.state==='running');
+  $('#run-tray').replaceChildren(h('div',{class:'row-between'},h('strong',{},`并行运行 · ${running.length} 款`),button('时长详情',()=>navigate('runs'),'small subtle')),
+    h('div',{class:'run-chips'},runs.length?runs.map(run=>h('div',{class:`run-chip ${run.state}`},button(state.workspace.tasks.find(t=>t.appId===run.appId)?.title||run.name||`AppID ${run.appId}`,async()=>{const item=state.workspace.tasks.find(t=>t.appId===run.appId);if(item)await chooseTask(item.id);await navigate('runs');},'subtle'),h('span',{},labels[run.state]||run.state),run.state==='running'?button('单停',async()=>{await window.hub.invoke('runs.stop',{appId:run.appId});await refresh(false);},'small'):null)):h('span',{class:'muted'},'当前没有运行请求；切换游戏和写作不会自动开启运行。')));
 }
 function render() {
-  main.replaceChildren();
-  if (state.fixture) main.append(note('当前为演示模式：游戏、资料与成就均为合成样本，不会连接 Steam 或计入真实时长。', true));
-  ({ library: renderLibrary, tasks: renderTasks, runs: renderRuns, achievements: renderAchievements, research: renderResearch, editor: renderEditor, settings: renderSettings })[activeTab]();
+  main=workspaceMain; main.replaceChildren();
+  if(state.fixture)main.append(note('演示工作区：使用合成游戏、资料与成就，不连接 Steam。',true));
+  ({library:renderLibrary,runs:renderOverview,achievements:renderAchievements,editor:renderEditor,publication:renderPublication,settings:renderSettings,account:renderConnectionPanel})[activeTab]();
+}
+function renderOverview(){renderRuns();renderTaskSettings();}
+function renderTaskSettings(){
+  if(!task())return;
+  const current=task(),groupSelect=select(state.workspace.groups.map(g=>[g.id,g.name]),current.groupId),target=h('input',{type:'number',min:0,step:.5,value:current.targetMinutes===null?'':current.targetMinutes/60,placeholder:'可留空'}),source=h('input',{value:current.source||'',placeholder:'可留空'}),status=select([['active','进行中'],['completed','已完成'],['archived','已归档']],current.status);
+  main.append(h('section',{class:'card section-gap'},h('h2',{},'游戏任务设置'),h('div',{class:'form-grid'},field('唯一投稿群组',groupSelect),field('累计目标（小时）',target),field('来源 / 备注',source),field('工作进度',status)),button('保存任务设置',async()=>{await window.hub.invoke('task.update',{taskId:current.id,groupId:groupSelect.value,targetMinutes:target.value===''?null:Number(target.value)*60,source:source.value,status:status.value});await refresh();toast('任务设置已保存');},'primary')));
+}
+function splitter(label,value,min,max,onResize){
+  const bar=h('button',{type:'button',class:'splitter',role:'separator','aria-label':label,'aria-orientation':'vertical','aria-valuemin':min,'aria-valuemax':max,'aria-valuenow':value});
+  const update=next=>{value=Math.max(min,Math.min(max,next));bar.setAttribute('aria-valuenow',value);onResize(value);};
+  bar.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();update(event.key==='Home'?min:event.key==='End'?max:value+(event.key==='ArrowLeft'?-10:10));}});
+  bar.addEventListener('pointerdown',event=>{event.preventDefault();const start=event.clientX,began=value;bar.setPointerCapture(event.pointerId);const move=e=>update(began+(label==='调整资料宽度'?-1:1)*(e.clientX-start));const end=()=>{bar.removeEventListener('pointermove',move);bar.removeEventListener('pointerup',end);bar.removeEventListener('pointercancel',end);};bar.addEventListener('pointermove',move);bar.addEventListener('pointerup',end);bar.addEventListener('pointercancel',end);});
+  return bar;
 }
 function requireTask() {
   if (task()) return true;
@@ -156,34 +194,31 @@ function requireTask() {
   return false;
 }
 function dialog(title, content, actions = []) {
-  authDialogVisible = false;
   const box = $('#modal'); if (box.open) box.close();
   $('#modal-content').replaceChildren(h('h2', {}, title), content, h('div', { class: 'actions' }, button('关闭', () => box.close(), 'subtle'), ...actions)); box.showModal();
 }
-function connectDialog() {
-  authDialogVisible = true; renderAuthDialog();
-}
+function connectDialog() { authReauthenticate=false; logoutConfirmation=false; return navigate('account'); }
 async function authenticate(command, payload = {}) {
   const attempt = ++authAttempt; authError = '';
   authAccountName = payload.accountName?.trim() || state.steam.accountName || authAccountName;
   state.steam = { ...state.steam, state: command === 'steam.restore' ? 'restoring' : 'logging_in', accountName: authAccountName, error: undefined };
-  renderTop(); renderAuthDialog();
+  renderTop(); renderConnectionPanel();
   try {
     const pending = window.hub.invoke(command, payload);
     delete payload.password;
     await pending;
     if (attempt !== authAttempt) return;
     await refresh(false);
-    if (authDialogVisible && $('#modal').open) renderAuthDialog();
+    if (activeTab==='account') renderConnectionPanel();
     await loadCatalog('library', libraryQuery, { force: true, automatic: true }).catch(fail);
   } catch (error) {
     if (attempt !== authAttempt) return;
     await refresh(false); authError = errors[error.code ?? error.message] ?? 'Steam 连接未完成，请重试。';
-    if (authDialogVisible && $('#modal').open) renderAuthDialog();
+    if (activeTab==='account') renderConnectionPanel();
   } finally { delete payload.password; }
 }
-function renderAuthDialog() {
-  const status = state.steam, box = $('#modal');
+function renderConnectionPanel() {
+  const status = state.steam;
   const busy = ['logging_in','restoring','reconnecting','guard_required'].includes(status.state);
   const content = h('div', { class: 'stack' }, h('div', { id: 'steam-login-progress', role: 'status', 'aria-live': 'polite' },
     h('p', {}, `账号：${status.accountName || authAccountName || '尚未输入'}`), h('p', {}, labels[status.state] ?? status.state),
@@ -192,7 +227,7 @@ function renderAuthDialog() {
   if (status.state === 'connected') {
     content.append(h('p', {}, `当前协议账号：${status.steamId}`), h('p', {}, status.persistence === 'encrypted' ? '会话已加密保存，下次启动会自动恢复。' : '当前连接可用，会话尚未持久保存。'),
       h('p', { class: 'inline-note' }, '网页发布与本机成就进程分别核对账号。退出连接将清除保存的协议会话，并停止运行请求；本地草稿保留。'));
-    actions.push(button('退出连接并停止运行', async () => { ++authAttempt; authError = ''; await window.hub.invoke('steam.logout'); await refresh(false); renderAuthDialog(); }));
+    if(logoutConfirmation){content.append(note('退出将停止全部运行请求并清除已保存的会话，任务与草稿保留。'));actions.push(button('确认退出连接',async()=>{++authAttempt;authError='';logoutConfirmation=false;authReauthenticate=false;await window.hub.invoke('steam.logout');await refresh(false);if(activeTab==='account')renderConnectionPanel();},'danger'),button('保留连接',()=>{logoutConfirmation=false;renderConnectionPanel();},'subtle'));}else actions.push(button('退出连接并停止运行',()=>{logoutConfirmation=true;renderConnectionPanel();}));
   } else if (status.state === 'guard_required') {
     const prompt = status.guardPrompt ?? {}, code = h('input', { autocomplete: 'one-time-code', placeholder: 'Steam Guard 验证码' });
     content.append(h('p', {}, prompt.kind === 'email' ? `请输入邮件验证码${prompt.domain ? `（${prompt.domain}）` : ''}。` : '请输入手机验证码；如果手机要求确认登录，请由本人完成。'),
@@ -200,41 +235,42 @@ function renderAuthDialog() {
     actions.push(button('提交验证码', async () => {
       const value = code.value; code.value = ''; authError = '';
       try { await window.hub.invoke('steam.guard', { code: value }); }
-      catch (error) { authError = errors[error.code ?? error.message] ?? '验证码提交未完成，请检查后重试。'; renderAuthDialog(); }
+      catch (error) { authError = errors[error.code ?? error.message] ?? '验证码提交未完成，请检查后重试。'; if(activeTab==='account')renderConnectionPanel(); }
     }, 'primary'));
   } else if (!busy) {
-    const name = h('input', { autocomplete: 'username', placeholder: 'Steam 账号名', value: status.accountName || authAccountName });
-    const password = h('input', { type: 'password', autocomplete: 'current-password', placeholder: '密码仅在内存中使用' });
-    content.append(field('账号名', name), field('密码', password), h('p', { class: 'inline-note' }, '密码和验证码不会保存；可复用会话使用本机系统加密保存，不随工作区备份导出。'));
-    actions.push(button('连接', () => { const payload = { accountName: name.value, password: password.value }; password.value = ''; return authenticate('steam.login', payload); }, 'primary'));
-    if (status.restoreAvailable || (state.credentials.steamSessionConfigured && !['steam_auth_required','steam_session_expired','invalid_steam_session','steam_credentials_rejected'].includes(status.error))) actions.push(button('重试恢复连接', () => authenticate('steam.restore')));
+    const reusable=status.restoreAvailable||(state.credentials.steamSessionConfigured&&!['steam_auth_required','steam_session_expired','invalid_steam_session','steam_credentials_rejected'].includes(status.error));
+    if(reusable&&!authReauthenticate){
+      content.append(h('p',{},'优先使用本机保存的加密会话，恢复连接不会自动续跑。'));
+      actions.push(button('再次尝试保存的会话',()=>authenticate('steam.restore'),'primary'),button('改用账号重新认证',()=>{authReauthenticate=true;renderConnectionPanel();},'subtle'));
+    }else{
+      const name=h('input',{autocomplete:'username',placeholder:'Steam 账号名',value:status.accountName||authAccountName}),password=h('input',{type:'password',autocomplete:'current-password',placeholder:'密码仅在内存中使用'});
+      content.append(field('账号名',name),field('密码',password),h('p',{class:'inline-note'},'密码和验证码不会保存；可复用会话使用本机系统加密保存，不随工作区备份导出。'));
+      actions.push(button('连接',()=>{const payload={accountName:name.value,password:password.value};password.value='';return authenticate('steam.login',payload);},'primary'));
+      if(reusable)actions.push(button('返回保存的会话',()=>{authReauthenticate=false;renderConnectionPanel();},'subtle'));
+    }
   }
-  if (busy) actions.push(button('取消登录', async () => { ++authAttempt; authError = ''; await window.hub.invoke('steam.logout'); await refresh(false); renderAuthDialog(); }, 'subtle'));
+  if (busy) actions.push(button('取消登录', async () => { ++authAttempt; authError = ''; await window.hub.invoke('steam.logout'); await refresh(false); if(activeTab==='account')renderConnectionPanel(); }, 'subtle'));
   const message = authError || (status.error && (errors[status.error] ?? status.error));
   if (message) content.append(note(message));
   if (status.persistenceError) content.append(note(`会话保存或清除未完成：${errors[status.persistenceError] ?? status.persistenceError}`));
-  $('#modal-content').replaceChildren(h('h2', {}, status.state === 'connected' ? 'Steam 连接' : '连接 Steam'), content,
-    h('div', { class: 'actions' }, button('关闭', () => { authDialogVisible = false; box.close(); }, 'subtle'), ...actions));
-  if (!box.open) box.showModal();
+  main.replaceChildren(heading('Steam 连接','认证状态持续显示，恢复连接与重新开启运行分别处理。',button('返回当前游戏',()=>navigate('editor'),'subtle')),h('section',{class:'card connection-panel'},content,h('div',{class:'actions section-gap'},...actions)));
 }
-function createTaskDialog(game) {
-  const groups = select(state.workspace.groups.map(g => [g.id, g.name]), state.workspace.groups[0]?.id);
-  const target = h('input', { type: 'number', min: 0, step: .5, placeholder: '可留空' });
-  const source = h('input', { placeholder: '例如：Curator Connect / Key / 自购，可留空' });
-  dialog('新建评测任务', h('div', { class: 'stack' }, h('p', {}, `${game.name} · AppID ${game.appId}`), field('唯一投稿群组', groups), field('Steam 累计目标（小时）', target, '累计目标与每次开启时的自动结束时间分开保存。'), field('领取来源 / 备注', source)),
-    [button('创建任务', async () => {
-      await flushAll(); const created = await window.hub.invoke('task.create', { appId: game.appId, title: game.name, groupId: groups.value,
-        targetMinutes: target.value === '' ? null : Number(target.value) * 60, source: source.value });
-      $('#modal').close(); taskId = created.id; activeTab = 'tasks'; await refresh();
-    }, 'primary')]);
+
+function createTaskDialog(game){newTaskGame=game;searchDetail=null;render();}
+function renderNewTask(game){
+  const groups=select([['','请选择唯一投稿群组'],...state.workspace.groups.map(g=>[g.id,g.name])],'');
+  const target=h('input',{type:'number',min:0,step:.5,placeholder:'可留空'}),source=h('input',{placeholder:'可留空'});
+  main.append(h('section',{class:'card section-gap'},h('h2',{},`建立任务 · ${game.name}`),h('p',{},`AppID ${game.appId}`),h('div',{class:'form-grid'},field('唯一投稿群组',groups),field('累计目标（小时）',target),field('来源 / 备注',source)),h('div',{class:'actions section-gap'},button('建立任务并打开',async()=>{
+    if(!groups.value)throw new Error('请选择一个投稿群组');await flushAll();const created=await window.hub.invoke('task.create',{appId:game.appId,title:game.name,groupId:groups.value,targetMinutes:target.value===''?null:Number(target.value)*60,source:source.value});newTaskGame=null;taskId=created.id;activeTab='editor';await refresh();
+  },'primary'),button('取消建立',()=>{newTaskGame=null;render();},'subtle'))));
 }
-async function gameDetails(game) {
-  const info = await window.hub.invoke('steam.details', { appId: game.appId });
-  dialog(info.name || game.name, h('div', { class: 'stack' }, h('div', { class: 'actions' }, pill(`AppID ${game.appId}`), ...Object.entries(info.platforms ?? {}).filter(([, value]) => value).map(([key]) => pill(key))),
-    h('p', { class: 'source-content' }, info.description || '暂无可读取的商店介绍。'), h('p', { class: 'muted' }, `开发商：${(info.developers ?? []).join('、') || '未知'}`)),
-    [button('打开 Steam 商店', () => openLink(info.storeUrl || `https://store.steampowered.com/app/${game.appId}/`)),
-      state.workspace.activeSteamId?button('查看我的个人评测',()=>openLink(`https://steamcommunity.com/profiles/${state.workspace.activeSteamId}/recommended/${game.appId}/`)):null,
-      button('创建任务', () => createTaskDialog(game), 'primary')].filter(Boolean));
+async function gameDetails(game){
+  const context=captureContext(),result=await window.hub.invoke('steam.details',{appId:game.appId});
+  if(activeTab!=='library'||!isCurrent(context))return;searchDetail={...result,appId:game.appId,name:result.name||game.name};newTaskGame=null;render();
+}
+function renderSearchDetail(info){
+  const existing=state.workspace.tasks.find(item=>item.appId===info.appId);
+  main.append(h('section',{class:'card section-gap'},h('h2',{},info.name),h('p',{class:'muted'},`AppID ${info.appId} · ${(info.developers||[]).join('、')||'开发商未知'}`),h('p',{class:'source-content'},info.description||'暂无商店介绍'),h('div',{class:'actions'},button('打开 Steam 商店',()=>openLink(info.storeUrl||`https://store.steampowered.com/app/${info.appId}/`)),state.workspace.activeSteamId?button('查看我的个人评测',()=>openLink(`https://steamcommunity.com/profiles/${state.workspace.activeSteamId}/recommended/${info.appId}/`)):null,button(existing?'打开已有任务':'选择群组建立任务',()=>existing?chooseTask(existing.id):createTaskDialog(info),'primary'),button('收起详情',()=>{searchDetail=null;render();},'subtle'))));
 }
 function resetCatalog(mode = catalogMode, query = libraryQuery) {
   catalogRequestSequence++; catalogMode = mode; libraryQuery = query; library = [];
@@ -265,7 +301,7 @@ async function loadCatalog(mode, query, { force = false, automatic = false } = {
 }
 function renderLibrary() {
   const refreshLibrary = () => loadCatalog('library', '', { force: true });
-  main.append(heading('游戏库', '从你的 Steam 库与商店发现游戏，将资料、运行与评测归于同一任务。', button('刷新游戏库', refreshLibrary, 'primary')));
+  main.append(heading('查找游戏', '从你的 Steam 库与商店发现游戏，将资料、运行与评测归于同一任务。', button('刷新游戏库', refreshLibrary, 'primary')));
   if (state.steam.state !== 'connected') main.append(note('连接 Steam 后可读取拥有的游戏与服务器累计分钟。商店搜索可独立使用；设置中的手动 ID 绑定只确定草稿归属。', true));
   const query = h('input', { type: 'search', value: libraryQuery, placeholder: '按游戏名搜索，或直接输入 AppID', 'aria-label': '搜索游戏' });
   const mode = select([['library','我的游戏库'],['store','Steam 商店']], catalogMode);
@@ -275,6 +311,8 @@ function renderLibrary() {
   query.addEventListener('keydown', event => { if (event.key === 'Enter') search().catch(fail); });
   mode.addEventListener('change', () => { resetCatalog(mode.value, ''); if (activeTab === 'library') render(); });
   main.append(h('div', { class: 'filters' }, query, mode, sort, button('搜索', search)));
+  if(newTaskGame)renderNewTask(newTaskGame);
+  if(searchDetail)renderSearchDetail(searchDetail);
   let games = library.filter(game => catalogMode === 'store' || !libraryQuery || game.name.toLowerCase().includes(libraryQuery.toLowerCase()) || String(game.appId) === libraryQuery);
   games = [...games].sort(librarySort === 'time' ? (a,b) => (b.steamMinutes ?? -1) - (a.steamMinutes ?? -1) : (a,b) => a.name.localeCompare(b.name, 'zh-CN'));
   const count = games.length;
@@ -284,24 +322,8 @@ function renderLibrary() {
     const existing = state.workspace.tasks.find(item => item.appId === game.appId);
     return h('article', { class: 'card game-card' }, h('div', { class: 'game-image' }, game.headerImage ? h('img', { src: game.headerImage, alt: '', loading: 'lazy' }) : '◇'),
       h('div', { class: 'game-content' }, h('h3', {}, game.name), h('div', { class: 'actions' }, pill(`AppID ${game.appId}`), pill(game.steamMinutes === null || game.steamMinutes === undefined ? '时长未知' : fmtMinutes(game.steamMinutes))),
-        h('div', { class: 'actions' }, button('商店与介绍', () => gameDetails(game), 'small subtle'), button(existing ? '进入任务' : '添加任务', async () => { if (existing) { await chooseTask(existing.id); await navigate('tasks'); } else createTaskDialog(game); }, 'small primary'))));
+        h('div', { class: 'actions' }, button('商店与介绍', () => gameDetails(game), 'small subtle'), button(existing ? '进入任务' : '添加任务', async () => { if (existing) { await chooseTask(existing.id); } else createTaskDialog(game); }, 'small primary'))));
   })));
-}
-function renderTasks() {
-  main.append(heading('评测任务', '一款游戏，一个投稿群组。任务进度、Steam 事实和发布结果分别保存。', button('添加游戏', () => navigate('library'), 'primary')));
-  if (!state.workspace.tasks.length) { main.append(empty('还没有评测任务', '先从游戏库或商店添加游戏。目标时长和来源备注均可留空。', button('选择游戏', () => navigate('library'), 'primary'))); return; }
-  const rows = state.workspace.tasks.map(item => h('tr', { class: 'selectable', onClick: () => chooseTask(item.id).catch(fail) },
-    h('td', {}, h('div', { class: 'game-title' }, item.title), h('span', { class: 'muted tiny' }, `AppID ${item.appId}`)), h('td', {}, state.workspace.groups.find(g => g.id === item.groupId)?.name),
-    h('td', {}, item.targetMinutes === null ? '未设置' : fmtMinutes(item.targetMinutes)), h('td', {}, pill(item.status, item.status === 'completed' ? 'good' : '')), h('td', {}, item.id === taskId ? pill('当前任务', 'good') : '→')));
-  main.append(h('div', { class: 'card table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, ...['游戏','投稿群组','累计目标','进度',''].map(v => h('th', {}, v)))), h('tbody', {}, rows))));
-  if (!task()) return;
-  const current = task(); const groupSelect = select(state.workspace.groups.map(g => [g.id,g.name]), current.groupId);
-  const target = h('input', { type: 'number', min: 0, step: .5, value: current.targetMinutes === null ? '' : current.targetMinutes / 60, placeholder: '可留空' });
-  const source = h('input', { value: current.source, placeholder: '可留空' });
-  const status = select([['active','进行中'],['completed','已完成'],['archived','已归档']], current.status);
-  main.append(h('div', { class: 'columns section-gap' }, h('section', { class: 'card' }, h('h2', {}, current.title), h('div', { class: 'form-grid' }, field('唯一投稿群组',groupSelect),field('Steam 累计目标（小时）',target),field('来源 / 备注',source),field('工作进度',status)),
-    h('div', { class: 'actions section-gap' }, button('保存任务设置', async () => { await window.hub.invoke('task.update', { taskId: current.id, groupId: groupSelect.value, source: source.value, targetMinutes: target.value === '' ? null : Number(target.value)*60, status: status.value }); await refresh(); toast('任务设置已保存'); }, 'primary'))),
-    h('section', { class: 'card' }, h('h2', {}, '继续工作'), h('p', { class: 'muted' }, `当前归属：${current.ownerSteamId}`), h('div', { class: 'stack' }, button('运行与时长', () => navigate('runs')), button('成就与统计', () => navigate('achievements')), button('搜集研究资料', () => navigate('research')), button('撰写与发布评测', () => navigate('editor'))))));
 }
 function renderRuns() {
   main.append(heading('运行与时长', 'Steam 累计分钟来自回读，本地会话时长单独显示。每款游戏独立启停。', button('刷新状态', () => refresh(), 'subtle')));
@@ -351,7 +373,7 @@ function renderAchievements() {
     const context=captureContext(current),sequence=++nativeReadSequence;
     const result=await window.hub.invoke('stats.read',{taskId:current.id});
     if(!isCurrent(context)||sequence!==nativeReadSequence)return;
-    nativeSnapshot=result; nativeTaskId=current.id; selectedAchievements.clear();statChanges.clear();if(activeTab==='achievements')render();
+    reconciliations.clear(); nativeSnapshot=result; nativeTaskId=current.id; selectedAchievements.clear();statChanges.clear();if(activeTab==='achievements')render();
   },'primary')));
   if (!nativeSnapshot || nativeTaskId!==current.id) main.append(empty('成就与统计尚未读取','需要本机 Steam 已登录，并且账号与任务绑定一致。读取和写入均在独立 AppID 原生进程内执行；不支持的项目会显示原因。'));
   else {
@@ -397,12 +419,15 @@ function renderAchievements() {
   for(const operation of (current.operations??[]).slice().reverse()) {
     main.append(h('div',{class:'card'},h('div',{class:'row-between'},pill(operation.state,['outcome_unknown','applying'].includes(operation.state)?'warn':''),h('span',{class:'muted tiny'},operation.updatedAt??operation.createdAt)),
       h('details',{class:'section-gap'},h('summary',{},'查看修改前值、提交和回读记录'),h('pre',{class:'json'},JSON.stringify(operation.result??operation.changes,null,2))),
-      operation.state==='outcome_unknown'?h('div',{},h('p',{class:'inline-note'},'请核对新读回值。人工确认只解除重试门禁，不会把该次结果改为自动核实。'),button('刷新并确认已检查未知结果',async()=>{
+      operation.state==='outcome_unknown'?h('div',{},h('p',{class:'inline-note'},'先独立回读，再核对修改前后值。人工确认只解除重试门禁，不会把该次结果改为自动核实。'),button('重新读取未知结果',async()=>{
         const context=captureContext(current),sequence=++nativeReadSequence;
-        const result=await window.hub.invoke('stats.acknowledge',{taskId:current.id,operationId:operation.id});await refresh(false);
+        const result=await window.hub.invoke('stats.reconcile',{taskId:current.id,operationId:operation.id});
         if(!isCurrent(context)||sequence!==nativeReadSequence)return;
-        nativeSnapshot=result;nativeTaskId=current.id;selectedAchievements.clear();statChanges.clear();render();
-      },'small')):null));
+        nativeSnapshot=result.readback;nativeTaskId=current.id;reconciliations.set(operation.id,result.reconciliationId);if(activeTab==='achievements')render();
+      },'small'),reconciliations.has(operation.id)?button('已核对回读，解除重试门禁',async()=>{
+        const context=captureContext(current);const result=await window.hub.invoke('stats.acknowledge',{taskId:current.id,operationId:operation.id,reconciliationId:reconciliations.get(operation.id)});reconciliations.delete(operation.id);await refresh(false);
+        if(!isCurrent(context))return;nativeSnapshot=result;nativeTaskId=current.id;selectedAchievements.clear();statChanges.clear();if(activeTab==='achievements')render();
+      },'small'):null):null));
   }
 }
 function filteredAchievements() {
@@ -432,14 +457,14 @@ function renderResearch() {
   main.append(h('div',{class:'card'},h('div',{class:'row-between'},h('h2',{},current.title),pill(`AppID ${current.appId}`)),
     h('p',{class:'muted'},'读取 Steam 评论，再按游戏名查找媒体。资料不足、同名歧义、付费墙与读取失败会保留状态。生成内容供你编辑，不代表你有相应游玩经历。'),
     h('div',{class:'actions'},button(busy?'正在搜集资料…':'搜集资料并生成长评初稿',async()=>{
-      if(busyTasks.has(current.id))return;const context=captureContext(current);await flushAll();if(!isCurrent(context))return;busyTasks.add(current.id);render();
+      if(busyTasks.has(current.id))return;const context=captureContext(current);await flushAll();if(!isCurrent(context))return;busyTasks.add(current.id);if(activeTab==='editor'&&sourcesOpen)updateSources();
       const lang=context.language;
       try {
         const result=await window.hub.invoke('research.run',{taskId:current.id,language:lang});
         const origin=result.origin;
         if(origin?.taskId===current.id&&origin.language===lang)suggestions.set(`${current.id}:${lang}:long`,{text:result.draft,taskId:current.id,baseRevision:origin.baseRevision,kind:'long',language:lang});
         await refresh(false);
-      } finally {busyTasks.delete(current.id);if(taskId===current.id&&activeTab==='research')render();}
+      } finally {busyTasks.delete(current.id);if(taskId===current.id&&activeTab==='editor'){if(sourcesOpen)updateSources();updateSuggestions();}else if(activeTab==='settings')updateBackupComparison();}
     },'primary'),button('取消当前研究',async()=>{await window.hub.invoke('research.cancel',{taskId:current.id});toast('已请求取消，已保存草稿与资料保留');},'subtle'),button('AI 设置',()=>navigate('settings'),'subtle'))));
   const research=current.research;
   if(!research){main.append(empty('把零散观点整理成可追溯的评测资料','Steam 评论和站外媒体会分开记录。未配置 AI 时仍可获取 Steam 评论；API 配置完成后可使用翻译、摘要与初稿生成。'));return;}
@@ -458,7 +483,7 @@ function renderResearch() {
     source.content?h('details',{},h('summary',{},'查看实际取得的内容'),h('div',{class:'source-content'},source.content)):h('p',{class:'muted'},'未取得可展示正文；不将搜索链接视为已读文章。'),
     source.url?button('打开来源',()=>openLink(source.url),'small subtle'):null));
   if(research.reviews?.length)main.append(h('details',{class:'card section-gap'},h('summary',{},`Steam 评论样本 · ${research.reviews.length} 条`),...research.reviews.slice(0,30).map(review=>h('div',{class:'attempt'},h('span',{class:'muted tiny'},`${review.language??''} · ${(review.recommended??review.voted_up)===true?'推荐':(review.recommended??review.voted_up)===false?'不推荐':'样本'}`),h('p',{class:'source-content'},review.review??review.text??''),button('翻译此评论',async()=>{
-    const result=await window.hub.invoke('ai.translate',{taskId:current.id,text:review.review??review.text??'',language,kind:'long'});dialog('评论译文',h('div',{class:'source-content'},result.text));
+    const result=await runAI(current.id,'ai.translate',{taskId:current.id,text:review.review??review.text??'',language,kind:'long'});dialog('评论译文',h('div',{class:'source-content'},result.text));
   },'small subtle')))));
 }
 function buffer(kind) {
@@ -496,11 +521,16 @@ function edited(value,textarea){
   const status=document.querySelector(`[data-save-status="${value.kind}"]`);if(status)status.textContent='待保存…';
   clearTimeout(value.timer);value.timer=setTimeout(()=>flushDraft(value).catch(fail),700);
 }
-function previewLong(text){
-  const known=state.workspace.groups.flatMap(item=>Object.values(item.footers)).map(v=>v.trim()).filter(Boolean);
-  let body=text.trim(),match;do{match=known.find(value=>body.endsWith(value));if(match)body=body.slice(0,-match.length).trim();}while(match);
-  const footer=group()?.footers[language]?.trim();return footer?`${body}\n\n${footer}`:body;
+function stripKnownFooters(text){
+  const known=state.workspace.groups.flatMap(item=>Object.values(item.footers)).map(value=>value.trim()).filter(Boolean);
+  let body=text.trim(),match,stripped=false;
+  do{match=known.find(value=>body.endsWith(value));if(match){body=body.slice(0,-match.length).trim();stripped=true;}}while(match);
+  return stripped?body:text;
 }
+function previewLong(text,lang=language,item=task()){
+  const body=stripKnownFooters(text).trim(),footer=group(item)?.footers[lang]?.trim();return footer?`${body}\n\n${footer}`:body;
+}
+
 async function applySuggestion(value){
   const current=task();if(!current||!value.text)throw new Error('empty_ai_suggestion');
   if(value.taskId!==current.id)throw new Error('operation_context_changed');
@@ -511,45 +541,62 @@ async function applySuggestion(value){
   buffers.delete(`${current.id}:${value.language??language}:${value.kind??'long'}`);await refresh(false);toast('建议已保存为新草稿');return saved;
 }
 function renderEditor(){
-  main.append(heading('评测编辑', '正文与群组尾巴分别保存；短评、全文链接与发布结果各自独立。',button('立即保存',async()=>{await flushAll();toast('草稿已保存');},'primary')));
+  main.append(heading('研究与写作','直接编辑排版后的正文，复制时生成 Steam 格式。',button(sourcesOpen?'收起资料':'查看资料与建议',async()=>{await flushAll();sourcesOpen=!sourcesOpen;render();},'subtle'),button('立即保存',async()=>{await flushAll();toast('草稿已保存');},'primary')));
   if(!requireTask())return;
-  const current=task(),long=buffer('long'),short=buffer('short');
-  const longArea=h('textarea',{class:'editor-text',value:long.text,'aria-label':'个人长评正文',spellcheck:'false'});
-  const shortArea=h('textarea',{class:'short-text',value:short.text,'aria-label':'鉴赏家短评正文'});
-  const longPreview=h('div',{class:'preview'});renderBBCode(previewLong(long.text),longPreview,url=>openLink(url).catch(fail));
-  const count=h('span',{},`${Array.from(short.text).length} / 199 字`);
-  const updateCount=()=>{const n=Array.from(shortArea.value).length;count.textContent=`${n} / 199 字`;count.classList.toggle('error',n>=200);};
-  longArea.addEventListener('input',()=>{edited(long,longArea);renderBBCode(previewLong(longArea.value),longPreview,url=>openLink(url).catch(fail));});
-  shortArea.addEventListener('input',()=>{edited(short,shortArea);updateCount();});updateCount();
-  const wrap=(opening,closing)=>{
-    const start=longArea.selectionStart,end=longArea.selectionEnd;
-    longArea.setRangeText(`${opening}${longArea.value.slice(start,end)||'文字'}${closing}`,start,end,'select');longArea.focus();longArea.dispatchEvent(new Event('input'));
-  };
-  const toolbar=h('div',{class:'toolbar'},...[['标题','[h2]','[/h2]'],['粗体','[b]','[/b]'],['斜体','[i]','[/i]'],['列表','[list]\n[*]','\n[/list]'],['引用','[quote]','[/quote]'],['剧透','[spoiler]','[/spoiler]'],['代码','[code]','[/code]'],['表格','[table][tr][th]','[/th][/tr][/table]'],['链接','[url=https://example.com/]','[/url]']].map(([name,start,end])=>button(name,()=>wrap(start,end),'small subtle')));
-  const longStatus=h('span',{'data-save-status':'long'},long.dirty?'待保存…':'已保存到本机');
-  const shortStatus=h('span',{'data-save-status':'short'},short.dirty?'待保存…':'已保存到本机');
-  const editor=h('section',{class:'card'},h('div',{class:'row-between'},h('h2',{},'个人长评'),pill(group()?.name??'群组未设置')),toolbar,longArea,
-    h('div',{class:'editor-meta'},longStatus,h('span',{},'正文不包含自动群组尾巴')),
-    h('div',{class:'actions'},button('AI 格式处理',()=>transformDraft('format','long',long)),button('翻译到当前文章语言',()=>transformDraft('translate','long',long)),button('从资料生成初稿',()=>navigate('research'),'subtle')),
-    h('h3',{class:'section-gap'},'本地预览'),longPreview,h('p',{class:'inline-note'},'预览按已识别的 BBCode 显示，最终格式与字段限制以 Steam 页面为准。群组尾巴在组合时添加，不写回正文。'));
-  const link=h('input',{type:'url',value:draft().fullReviewUrl,placeholder:'https://steamcommunity.com/profiles/…/recommended/…/','aria-label':'全文链接'});
-  const recommendation=select([['recommended','推荐'],['not_recommended','不推荐'],['informational','信息性']],draft().recommendation);
-  const shortCard=h('section',{class:'card'},h('h2',{},'鉴赏家短评'),shortArea,h('div',{class:'editor-meta'},shortStatus,count),
-    h('p',{class:'inline-note'},'严格少于 200 字。中英文、符号、空格、换行按 Unicode 码点计数；不添加尾巴或链接。'),
-    button('从长评生成短评建议',()=>transformDraft('shorten','short',long),'primary'),h('div',{class:'divider'}),field('个人长评全文链接（独立字段）',link),draft().fullReviewUrlNeedsRepair?note('此已有链接与当前账号或游戏不匹配，准备发布前请修正；原草稿仍保留。'):null,field('鉴赏家推荐类型',recommendation),
-    h('div',{class:'actions section-gap'},button('保存链接与推荐类型',async()=>{await window.hub.invoke('draft.options',{taskId:current.id,language,fullReviewUrl:link.value,recommendation:recommendation.value});await refresh(false);toast('独立链接与推荐类型已保存');})),
-    h('p',{class:'inline-note'},'个人长评在 Steam 上使用正面/负面评价；信息性类型仅供鉴赏家短评。发布前由你在页面确认。'));
-  main.append(h('div',{class:'columns'},editor,h('div',{class:'stack'},shortCard,h('section',{class:'card'},h('h2',{},'AI 修改建议'),suggestionPanel('long'),suggestionPanel('short')))));
-  for(const value of [long,short].filter(v=>v.conflict))main.prepend(h('section',{class:'banner'},h('p',{},`${value.kind==='long'?'长评':'短评'}保存版本已改变，本地文字仍保留。请复制或合并后重新载入保存版本。`),h('div',{class:'actions'},
-    button('复制本地未保存文字',()=>window.hub.invoke('clipboard.write',{text:value.text}),'small'),button('比较并处理冲突',async()=>{
-      await refresh(false);const saved=state.workspace.tasks.find(t=>t.id===value.taskId)?.drafts[value.language][value.kind];
-      dialog('草稿版本冲突',h('div',{},h('h3',{},'本地未保存文字'),h('pre',{class:'json'},value.text),h('h3',{},'磁盘保存版本'),h('pre',{class:'json'},saved?.text??'')),[
-        button('复制本地文字',()=>window.hub.invoke('clipboard.write',{text:value.text})),button('放弃本地修改，载入保存版本',()=>{clearTimeout(value.timer);buffers.delete(value.key);$('#modal').close();render();},'danger')]);
-    },'small'))));
-  main.append(h('section',{class:'card section-gap'},h('h2',{},'发布准备'),h('p',{class:'muted'},'冻结当前内容和目标，打开独立 Steam 会话。你本人登录、核对页面并最终提交；打开、填入和点击都不会直接标为已发布。'),
-    h('div',{class:'actions'},button('准备个人长评',()=>prepare('long'),'primary'),button('准备鉴赏家短评',()=>prepare('short')),button('刷新发布记录',async()=>{await refresh(false);updatePublications();},'subtle')),
-    h('div',{id:'publication-attempts'})));
-  updatePublications();
+  const current=task(),long=buffer('long'),short=buffer('short'),value=editorKind==='long'?long:short;
+  const writer=h('section',{class:'writer'},h('div',{class:'row-between'},h('div',{class:'actions'},...['long','short'].map(kind=>{const node=button(kind==='long'?'个人长评':'鉴赏家短评',async()=>{await flushAll();editorKind=kind;render();},editorKind===kind?'primary':'subtle');node.setAttribute('aria-pressed',String(editorKind===kind));return node;})),button('复制到 Steam',async()=>{await flushAll();if(editorKind==='short'&&Array.from(short.text).length>=200)throw new Error('short_review_must_be_under_200');await window.hub.invoke('clipboard.write',{text:editorKind==='long'?previewLong(long.text):short.text});toast('已复制到剪贴板');},'primary')));
+  const count=h('span',{class:'draft-count'});
+  const updateCount=()=>{count.textContent=editorKind==='short'?`${Array.from(short.text).length} / 199 字`:'';count.classList.toggle('error',editorKind==='short'&&Array.from(short.text).length>=200);};
+  if(editorKind==='long'){
+    const rich=createRichEditor({text:stripKnownFooters(long.text),label:'个人长评正文',onChange:text=>{edited(long,{value:text});},onLink:url=>openLink(url).catch(fail)});
+    writer.append(rich.toolbar,rich.element,h('p',{class:'inline-note'},'使用工具直接排版；按 ⌘ / Ctrl 点击正文链接可打开来源。'));
+  }else{
+    const area=h('textarea',{class:'short-text',value:short.text,'aria-label':'鉴赏家短评正文'});
+    area.addEventListener('input',()=>{edited(short,area);updateCount();});writer.append(area);
+  }
+  updateCount();writer.append(h('div',{class:'editor-meta'},h('span',{'data-save-status':editorKind},value.dirty?'待保存…':'已保存到本机'),count));
+  if(editorKind==='long'){
+    const footer=h('div',{class:'footer-preview'});renderRichText(group()?.footers[language]||'',footer,url=>openLink(url).catch(fail));
+    writer.append(h('details',{class:'group-footer'},h('summary',{},`群组尾巴 · 复制时组合一次 · ${group()?.name||'未设置'}`),footer),h('div',{class:'actions section-gap'},button('AI 格式处理',()=>transformDraft('format','long',long)),button('翻译到当前文章语言',()=>transformDraft('translate','long',long)),button('搜集研究资料',async()=>{await flushAll();sourcesOpen=true;render();},'subtle')));
+  }else{
+    const link=h('input',{type:'url',value:draft().fullReviewUrl,placeholder:'https://steamcommunity.com/profiles/…/recommended/…/','aria-label':'全文链接'}),recommendation=select([['recommended','推荐'],['not_recommended','不推荐'],['informational','信息性']],draft().recommendation);
+    writer.append(h('p',{class:'inline-note'},'严格少于 200 个 Unicode 码点。短评只含纯文字，不附加尾巴或链接。'),button('从长评生成短评建议',()=>transformDraft('shorten','short',long)),h('div',{class:'form-grid section-gap'},field('个人长评全文链接（独立字段）',link),field('鉴赏家推荐类型',recommendation)),draft().fullReviewUrlNeedsRepair?note('此已有链接与当前账号或游戏不匹配，准备发布前请修正；原草稿仍保留。'):null,button('保存链接与推荐类型',async()=>{await window.hub.invoke('draft.options',{taskId:current.id,language,fullReviewUrl:link.value,recommendation:recommendation.value});await refresh(false);toast('独立链接与推荐类型已保存');}));
+  }
+  writer.append(h('section',{class:'suggestion-section section-gap','data-suggestion-kind':editorKind},h('h2',{},'AI 修改建议'),suggestionPanel(editorKind)),button('检查发布目标',()=>navigate('publication'),'subtle'));
+  const layout=h('div',{class:`writing-layout${sourcesOpen?' sources-open':''}`},writer);
+  if(sourcesOpen){
+    const sources=h('aside',{class:'sources-pane','aria-label':'资料与建议'});
+    layout.append(splitter('调整资料宽度',sourcesWidth,220,480,width=>{sourcesWidth=width;layout.style.setProperty('--sources-width',`${width}px`);}),sources);
+    updateSources(sources);
+  }
+  layout.style.setProperty('--sources-width',`${sourcesWidth}px`);main.append(layout);
+  for(const pending of [long,short].filter(v=>v.conflict))main.prepend(h('section',{class:'banner'},h('p',{},`${pending.kind==='long'?'长评':'短评'}保存版本已改变，本地文字仍保留。`),h('div',{class:'actions'},button('复制本地未保存文字',()=>window.hub.invoke('clipboard.write',{text:pending.text}),'small'),button('比较并处理冲突',async()=>{
+    await refresh(false);const saved=state.workspace.tasks.find(t=>t.id===pending.taskId)?.drafts[pending.language][pending.kind];
+    dialog('草稿版本冲突',h('div',{},h('h3',{},'本地未保存文字'),h('pre',{class:'json'},pending.text),h('h3',{},'磁盘保存版本'),h('pre',{class:'json'},saved?.text||'')),[button('复制本地文字',()=>window.hub.invoke('clipboard.write',{text:pending.text})),button('放弃本地修改，载入保存版本',()=>{clearTimeout(pending.timer);buffers.delete(pending.key);$('#modal').close();render();},'danger')]);
+  },'small'))));
+}
+function renderPublication(){
+  main.append(heading('发布准备','长短评分别冻结版本、核对目标与记录结果。',button('返回正文',()=>navigate('editor'),'subtle')));
+  if(!requireTask())return;
+  const current=task(),article=draft();
+  main.append(h('section',{class:'card'},h('h2',{},'本次发布目标'),h('p',{},`${current.title} · AppID ${current.appId}`),h('p',{class:'inline-note'},`归属账号 ${current.ownerSteamId} · 投稿群组 ${group()?.name||current.groupId}（${current.groupId}） · ${language==='schinese'?'简体中文':'English'}`),h('p',{class:'muted'},'打开独立 Steam 会话，由你本人登录、检查字段并提交。填入内容后，请记录实际提交结果。'),h('div',{class:'two-columns'},...['long','short'].map(kind=>{
+    const pending=(current.publications??[]).find(attempt=>attempt.kind===kind&&attempt.language===language&&['submitted_unknown','imported_unverified'].includes(attempt.state));
+    const prepareButton=button(kind==='long'?'准备个人长评':'准备鉴赏家短评',()=>prepare(kind),'primary');prepareButton.disabled=Boolean(pending);
+    return h('div',{},h('h3',{},kind==='long'?'个人长评':'鉴赏家短评'),h('p',{class:'inline-note'},kind==='long'?'冻结当前正文，复制与填入时组合此群组的尾巴一次。':`${Array.from(article.short.text).length} / 199 字 · 全文链接 ${article.fullReviewUrl?'已填写':'未填写'}`),pending?note('已有待核实提交，请在下方记录中先核对结果。'):null,prepareButton);
+  })),h('div',{class:'row-between section-gap'},h('h2',{},'冻结版本与发布记录'),button('刷新发布记录',async()=>{await refresh(false);render();},'small subtle')),h('div',{id:'publication-attempts'})));updatePublications();
+}
+
+function updateSources(container=$('.sources-pane')){
+  if(!container)return;container.replaceChildren();const previous=main;main=container;try{renderResearch();}finally{main=previous;}
+}
+function updateSuggestions(){
+  const section=$('[data-suggestion-kind]');if(!section)return;
+  section.replaceChildren(h('h2',{},'AI 修改建议'),suggestionPanel(section.dataset.suggestionKind));
+}
+async function runAI(id,command,payload){
+  aiTasks.set(id,(aiTasks.get(id)||0)+1);
+  try{return await window.hub.invoke(command,payload);}
+  finally{const count=aiTasks.get(id)-1;if(count)aiTasks.set(id,count);else aiTasks.delete(id);if(activeTab==='settings')updateBackupComparison();}
 }
 function suggestionPanel(kind){
   const suggestion=suggestions.get(`${taskId}:${language}:${kind}`);
@@ -562,35 +609,58 @@ async function transformDraft(method,kind,source){
   if(!isCurrent(context))return;
   const baseRevision=state.workspace.tasks.find(item=>item.id===current.id).drafts[lang][kind].revision;
   toast('AI 正在处理，已有草稿保留…');
-  const result=await window.hub.invoke(`ai.${method}`,{taskId:current.id,text:source.text,language:lang,kind,baseRevision});
+  const result=await runAI(current.id,`ai.${method}`,{taskId:current.id,text:stripKnownFooters(source.text),language:lang,kind,baseRevision});
   suggestions.set(`${current.id}:${lang}:${kind}`,{text:result.text,taskId:current.id,baseRevision,kind,language:lang});
-  if(taskId===current.id&&language===lang&&activeTab==='editor')render();toast('修改建议已生成，请预览后应用');
+  if(taskId===current.id&&language===lang&&activeTab==='editor')updateSuggestions();toast('修改建议已生成，请预览后应用');
 }
 async function prepare(kind){
   const context=captureContext();
   await flushAll();await refresh(false);
   if(!isCurrent(context))throw new Error('operation_context_changed');
-  const attempt=await window.hub.invoke('publication.prepare',{taskId:context.taskId,language:context.language,kind});await refresh(false);updatePublications();toast(`已冻结${kind==='long'?'长评':'短评'}内容，发布前请核对目标与页面。`);return attempt;
+  const attempt=await window.hub.invoke('publication.prepare',{taskId:context.taskId,language:context.language,kind});await refresh(false);if(activeTab==='publication')render();toast(`已冻结${kind==='long'?'长评':'短评'}内容，发布前请核对目标与页面。`);return attempt;
+}
+function inspectionUrl(attempt){
+  const long=`https://steamcommunity.com/profiles/${attempt.ownerSteamId}/recommended/${attempt.appId}/`;
+  const short=`https://store.steampowered.com/curator/${attempt.groupId}/`;
+  if(attempt.resultUrl){
+    let url;try{url=new URL(attempt.resultUrl);}catch{return attempt.kind==='long'?long:short;}
+    const query=[...url.searchParams].every(([key,value])=>key==='appid'&&value===String(attempt.appId));
+    const path=new RegExp(`^/curator/${attempt.groupId}(?:/recommended/${attempt.appId})?/?$`);
+    if(url.protocol==='https:'&&!url.username&&!url.password&&!url.port&&(attempt.kind==='long'?url.href===long:url.hostname==='store.steampowered.com'&&path.test(url.pathname)&&query))return url.href;
+  }
+  return attempt.kind==='long'?long:short;
 }
 function updatePublications(){
   const container=$('#publication-attempts');if(!container||!task())return;
   const current=task();const attempts=(current.publications??[]).slice().reverse();
+  const signature=JSON.stringify([current.id,current.ownerSteamId,current.groupId,current.drafts.schinese.revision,current.drafts.english.revision,
+    state.workspace.groups.map(item=>item.footers),attempts.map(item=>[item.id,item.state,item.updatedAt,item.resultUrl,item.evidenceSource])]);
+  if(publicationViews.get(container)===signature)return;
+  publicationViews.set(container,signature);
   container.replaceChildren(...attempts.map(attempt=>{
-    const url=h('input',{type:'url',value:attempt.resultUrl||`https://steamcommunity.com/profiles/${current.ownerSteamId}/recommended/${current.appId}/`,placeholder:'发布结果 URL','aria-label':'发布结果链接'});
-    if(attempt.kind==='short'&&!attempt.resultUrl)url.value=`https://store.steampowered.com/curator/${attempt.groupId}/`;
-    const invoke=async(command,extra={})=>{const result=await window.hub.invoke(command,{taskId:current.id,attemptId:attempt.id,...extra});await refresh(false);updatePublications();return result;};
-    const frozen=h('details',{},h('summary',{},`查看冻结的${attempt.kind==='long'?'长评':'短评'} · ${attempt.language}`),h('pre',{class:'json'},attempt.text??''),attempt.fullReviewUrl?h('p',{class:'source-url'},`全文链接：${attempt.fullReviewUrl}`):null);
-    const actions=h('div',{class:'actions'},button('打开官方页面',async()=>{if(state.fixture){toast('演示模式不会打开真实 Steam 发布页面');return;}await invoke('publication.open');},'small'),
+    const valid=typeof attempt.id==='string'&&attempt.id.length>0&&['long','short'].includes(attempt.kind)&&['schinese','english'].includes(attempt.language)&&/^7656119\d{10}$/.test(attempt.ownerSteamId)&&Number.isInteger(attempt.appId)&&attempt.appId>0&&attempt.appId<=0xffffffff&&/^[1-9]\d{0,19}$/.test(attempt.groupId)&&typeof attempt.text==='string';
+    if(!valid)return h('div',{class:'attempt'},h('h3',{},'历史发布记录需要人工核对'),note('这条记录缺少完整的账号、游戏或语言信息。原始资料已保留，可复制后人工核对。'),h('div',{class:'frozen-body'},typeof attempt.text==='string'?attempt.text:'没有可展示的正文'),button('复制原始历史记录',()=>window.hub.invoke('clipboard.write',{text:JSON.stringify(attempt,null,2)}),'small subtle'));
+    const key=`${current.id}:${attempt.id}`,savedUrl=attempt.resultUrl||'';
+    let pendingUrl=publicationInputs.get(key);if(!pendingUrl){pendingUrl={value:savedUrl,saved:savedUrl};publicationInputs.set(key,pendingUrl);}else{if(pendingUrl.value===pendingUrl.saved)pendingUrl.value=savedUrl;pendingUrl.saved=savedUrl;}
+    const url=h('input',{type:'url',value:pendingUrl.value,oninput:()=>{pendingUrl.value=url.value;},placeholder:'粘贴实际发布结果的 HTTPS 链接','aria-label':'发布结果链接'});
+    const article=current.drafts[attempt.language];
+    const stale=attempt.imported||attempt.ownerSteamId!==current.ownerSteamId||attempt.appId!==current.appId||attempt.groupId!==current.groupId||attempt.draftRevision!==article.revision||attempt.text!==(attempt.kind==='long'?previewLong(article.long.text,attempt.language,current):article.short.text)||attempt.recommendation!==article.recommendation||(attempt.kind==='short'&&attempt.fullReviewUrl!==article.fullReviewUrl);
+    const blocked=stale||['submitted_unknown','imported_unverified'].includes(attempt.state);
+    const invoke=async(command,extra={})=>{const result=await window.hub.invoke(command,{taskId:current.id,attemptId:attempt.id,...extra});await refresh(false);if(activeTab==='publication')render();return result;};
+    const frozenBody=h('div',{class:'frozen-body'});if(attempt.kind==='long')renderRichText(attempt.text??'',frozenBody,url=>openLink(url).catch(fail));else frozenBody.textContent=attempt.text??'';
+    const frozen=h('details',{},h('summary',{},`查看冻结的${attempt.kind==='long'?'长评':'短评'} · ${attempt.language}`),frozenBody,attempt.fullReviewUrl?h('p',{class:'source-url'},`全文链接：${attempt.fullReviewUrl}`):null);
+    const actions=h('div',{class:'actions'},!blocked?button('打开官方页面',async()=>{if(state.fixture){toast('演示模式不会打开真实 Steam 发布页面');return;}await invoke('publication.open');},'small'):null,button('打开结果页核对',async()=>{if(state.fixture){toast('演示模式不会打开真实 Steam 结果页面');return;}await openLink(inspectionUrl(attempt));},'small subtle'),
       button('检查页面身份与字段',async()=>{const result=await invoke('publication.inspect');toast(result.success?'账号与目标字段检查通过':`页面未就绪：${result.code}`,!result.success);},'small'),
       button('填入冻结内容（不提交）',async()=>{const result=await invoke('publication.fill');toast(result.success?'已填入。请本人核对推荐、披露、全文链接并提交':`未填入：${result.code}。可复制后在官方页面人工填写。`,!result.success);},'small'),
       button('复制正文',()=>window.hub.invoke('clipboard.write',{text:attempt.text??''}),'small subtle'),
       attempt.fullReviewUrl?button('复制独立全文链接',()=>window.hub.invoke('clipboard.write',{text:attempt.fullReviewUrl}),'small subtle'):null);
+    for(const action of actions.querySelectorAll('button'))if(['检查页面身份与字段','填入冻结内容（不提交）'].includes(action.textContent))action.disabled=blocked;
     const recordActions=h('div',{class:'actions'},button('记录已提交 / 结果待核实',async()=>{await invoke('publication.record',{state:'submitted_unknown'});toast('已记录待核实，不会盲目再次填充或发布。');},'small'),
       button('本人已核对此结果 URL',async()=>{await invoke('publication.record',{state:'user_confirmed',resultUrl:url.value});toast('已记录用户确认，未标为应用自动回读核实。');},'small'),
       attempt.kind==='long'?button('从 Steam 回读核验长评',async()=>{const result=await invoke('publication.verify',{resultUrl:url.value});toast(result.verified?'Steam 回读与冻结内容匹配':`仍待核实：${result.reason}`,!result.verified);},'small primary'):null,
       button('确认本次未成功',async()=>{await invoke('publication.record',{state:'failed'});toast('已记录用户确认失败，允许修正后重新准备。');},'small subtle'));
     return h('div',{class:'attempt'},h('div',{class:'row-between'},h('h3',{},`${attempt.kind==='long'?'个人长评':'鉴赏家短评'} · ${attempt.language}`),pill(attempt.state,['submitted_unknown','imported_unverified'].includes(attempt.state)?'warn':attempt.state==='verified'?'good':'')),
-      h('p',{class:'inline-note'},`AppID ${attempt.appId} · 群组 ${attempt.groupId} · ${attempt.updatedAt??attempt.createdAt??''} · ${attempt.evidenceSource||'尚无发布证据'}`),frozen,actions,url,recordActions,
+      h('p',{class:'inline-note'},`账号 ${attempt.ownerSteamId} · AppID ${attempt.appId} · 群组 ${attempt.groupId} · ${attempt.updatedAt??attempt.createdAt??''} · ${attempt.evidenceSource||'尚无发布证据'}`),stale?note(attempt.imported?'导入发布记录需要重新核实，冻结正文可供比较。':'草稿或发布目标已变化，当前冻结内容已过期。请根据最新正文重新准备。'):['submitted_unknown','imported_unverified'].includes(attempt.state)?note('先打开页面核对真实结果，再记录确认或失败；核对完成前暂停再次填充。'):null,frozen,actions,url,recordActions,
       h('p',{class:'inline-note'},'如果手动粘贴并提交，请主动记录待核实或真实结果。字段无法识别时可使用复制辅助流程；全文链接始终单独填写。'));
   }));
   if(!attempts.length)container.append(h('p',{class:'inline-note section-gap'},'尚未准备发布。长评与短评分别记录，不会因任一成功把另一项标成成功。'));
@@ -627,13 +697,44 @@ function renderSettings(){
   main.append(h('section',{class:'card section-gap'},h('h2',{},'群组尾巴模板'),h('p',{class:'muted'},'以下是可编辑的首版链接模板。请在正式发布前替换为你的正式尾巴；短评始终不添加尾巴。'),groupCards.map(item=>item.node),h('div',{class:'actions section-gap'},button('保存群组模板',async()=>{
     await flushAll();await window.hub.invoke('settings.save',{groups:groupCards.map(item=>({id:item.id,name:item.name.value,footers:{schinese:item.zh.value,english:item.en.value}}))});await refresh();toast('群组模板已保存');
   },'primary'))));
-  main.append(h('section',{class:'card section-gap'},h('h2',{},'本地备份'),h('p',{class:'muted'},'导出任务、语言独立草稿、来源与发布记录；不含密钥或 Steam 网页会话。导入会替换工作区，已有发布成功记录需重新核实。'),
-    h('div',{class:'actions'},button('导出工作区备份',async()=>{await flushAll();const result=await window.hub.invoke('backup.export');if(!result.cancelled)toast('备份已导出');}),button('从备份恢复',async()=>{await flushAll();const result=await window.hub.invoke('backup.import');if(!result.cancelled){buffers.clear();nativeSnapshot=null;await refresh();toast('工作区已恢复');}},'subtle'))));
+  main.append(h('section',{class:'card section-gap'},h('h2',{},'本地备份'),h('p',{class:'muted'},'导出任务、语言独立草稿、来源与发布记录。恢复前先比较各款游戏的正文与群组，确认后替换当前工作区；导入的发布记录与成就结果需重新核实。'),
+    h('div',{class:'actions'},button('导出工作区备份',async()=>{await flushAll();const result=await window.hub.invoke('backup.export');if(!result.cancelled)toast('备份已导出');}),button('选择备份并比较',async()=>{await flushAll();const context=captureContext();const result=await window.hub.invoke('backup.preview');if(result.cancelled)return;if(context.owner!==state.workspace.activeSteamId)throw new Error('operation_context_changed');backupPreview=result;if(activeTab==='settings')updateBackupComparison();},'subtle'))));
+  main.append(h('div',{id:'backup-comparison-container'}));updateBackupComparison();
 }
 
-$('#account-button').addEventListener('click',connectDialog);
+
+function updateBackupComparison(){
+  const container=$('#backup-comparison-container');if(!container)return;container.replaceChildren();if(backupPreview)renderBackupComparison(container);
+}
+function renderBackupComparison(container){
+  const imported=backupPreview.workspace,current=state.workspace;
+  const appIds=[...new Set([...current.tasks,...imported.tasks].map(item=>item.appId))];
+  const comparison=h('section',{class:'card section-gap backup-comparison'},h('h2',{},'核对备份与当前工作区'),h('p',{},'左侧为当前正文，右侧为备份正文。确认恢复后，备份将替换所有账号的任务、群组与历史；当前连接和服务配置继续使用。'));
+  if(backupPreview.scope){const scope=backupPreview.scope;comparison.append(note(`其他账号也会被替换：任务 ${scope.currentOtherTasks} → ${scope.importedOtherTasks} 项，运行历史 ${scope.currentOtherRuns} → ${scope.importedOtherRuns} 条。这里仅展示当前账号的正文。`));}
+  for(const appId of appIds){
+    const before=current.tasks.find(item=>item.appId===appId),after=imported.tasks.find(item=>item.appId===appId);
+    const names=(workspace,item)=>item?workspace.groups.find(value=>value.id===item.groupId)?.name||item.groupId:'无此任务';
+    const details=h('details',{class:'attempt'},h('summary',{},`${after?.title||before.title} · AppID ${appId} · ${before&&after?'对比':after?'备份新增':'恢复后移除'}`),h('p',{class:'inline-note'},`投稿群组：${names(current,before)} → ${names(imported,after)}`));
+    for(const lang of ['schinese','english'])for(const kind of ['long','short']){
+      const left=before?.drafts[lang][kind].text??'',right=after?.drafts[lang][kind].text??'';
+      details.append(h('h3',{},`${lang==='schinese'?'简体中文':'English'} · ${kind==='long'?'个人长评':'鉴赏家短评'} · ${left===right?'相同':'有差异'}`),h('div',{class:'backup-texts'},h('div',{},h('span',{class:'inline-note'},'当前'),h('pre',{},left||'（空）')),h('div',{},h('span',{class:'inline-note'},'备份'),h('pre',{},right||'（空）'))));
+    }
+    comparison.append(details);
+  }
+  const running=state.runs.filter(run=>run.state==='running'),research=[...new Set([...busyTasks,...aiTasks.keys()])];
+  const stop=button('停止全部运行与研究',async()=>{await Promise.all([...running.map(run=>window.hub.invoke('runs.stop',{appId:run.appId})),...research.map(id=>window.hub.invoke('research.cancel',{taskId:id}))]);await refresh(false);if(activeTab==='settings')updateBackupComparison();toast('已请求停止，确认状态结束后再恢复');},'subtle');
+  const restore=button('确认用此备份替换工作区',async()=>{await flushAll();await window.hub.invoke('backup.restore',{previewId:backupPreview.previewId});backupPreview=null;buffers.clear();suggestions.clear();reconciliations.clear();publicationInputs.clear();nativeSnapshot=null;uiEpoch++;await refresh();toast('工作区已从备份恢复，导入证据待重新核实');},'danger');
+  restore.disabled=running.length>0||research.length>0;
+  comparison.append(note('恢复将替换当前任务与群组。备份中的发布成功记录、成就结果与运行时长都作为历史资料保留，需重新核对。'),running.length||research.length?note(`当前还有 ${running.length} 款运行、${research.length} 款游戏的研究或 AI 处理；停止后方可恢复。`):null,h('div',{class:'actions'},running.length||research.length?stop:null,restore,button('取消本次恢复',()=>{backupPreview=null;updateBackupComparison();},'subtle')));
+  container.append(comparison);
+}
+
+$('#account-button').addEventListener('click',()=>connectDialog().catch(fail));
+$('#find-games').addEventListener('click',()=>navigate('library').catch(fail));
+$('#settings-button').addEventListener('click',()=>navigate('settings').catch(fail));
+$('#rail-splitter').replaceWith(splitter('调整游戏列表宽度',railWidth,145,300,value=>{railWidth=value;document.documentElement.style.setProperty('--rail-width',`${value}px`);}));
 $('#task-picker').addEventListener('change',event=>chooseTask(event.target.value||null).catch(fail));
-$('#language-picker').addEventListener('change',async event=>{const lang=event.target.value;try{await flushAll();uiEpoch++;language=lang;renderTop();render();}catch(error){renderTop();fail(error);}});
+$('#language-picker').addEventListener('change',async event=>{const lang=event.target.value;try{await flushAll();uiEpoch++;reconciliations.clear();language=lang;renderTop();render();}catch(error){renderTop();fail(error);}});
 async function requestClose(){
   document.body.inert=true;
   try { await flushAll();await window.hub.invoke('app.close-ready',{allow:true}); }
@@ -652,11 +753,11 @@ window.hub.onEvent(event=>{
   if(event.type==='steam.status'){
     if(event.data.state==='connected')authError='';
     state.steam=event.data;renderTop();
-    if(authDialogVisible&&$('#modal').open)renderAuthDialog();
-    else if(event.data.state==='guard_required')connectDialog();
+    if(activeTab==='account')renderConnectionPanel();
+    else if(event.data.state==='guard_required')connectDialog().catch(fail);
   }
   else if(event.type==='steam.runs'){state.runs=event.data;renderTop();if(activeTab==='runs'&&!main.querySelector('input:focus'))render();}
-  else if(event.type==='workspace.changed')refresh(false).then(()=>{if(activeTab==='editor')updatePublications();}).catch(fail);
+  else if(event.type==='workspace.changed')refresh(false).then(()=>{if(activeTab==='publication')updatePublications();}).catch(fail);
   else if(event.type==='app.error')toast('工作区保存未完成，请检查本机磁盘与权限。',true);
 });
 window.addEventListener('unhandledrejection',event=>{event.preventDefault();fail(event.reason);});
@@ -664,7 +765,7 @@ window.addEventListener('beforeunload',event=>{if([...buffers.values()].some(val
 try{
   state=await window.hub.invoke('init');language=state.workspace.settings.articleLanguage;hideHidden=state.workspace.settings.hideHiddenAchievements;
   taskId=state.workspace.tasks.find(item=>item.status==='active')?.id??state.workspace.tasks[0]?.id??null;
-  activeTab=taskId?'tasks':'library';renderTop();render();
+  activeTab=taskId?'editor':'library';renderTop();render();
   if(state.steam.state==='guard_required')connectDialog();
   if(state.fixture)await loadCatalog('library', libraryQuery, { force: true, automatic: true });
 }catch(error){main.replaceChildren(empty('工作区暂时无法打开',errors[error.code??error.message]??error.message));}

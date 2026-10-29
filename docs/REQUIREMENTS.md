@@ -8,7 +8,7 @@
 
 2026-10-21 交互确认：主入口采用“游戏工作台”——左侧选游戏，右侧围绕当前游戏完成运行、成就、研究与写作，底部常驻并行运行。第二轮选择“正文优先，资料按需展开”，允许拖拽调整宽度；正文采用输入即预览的编辑，不切换预览和编辑，格式在复制时带出。以上主结构与编辑规则已确认，其他操作细节及最终视觉方向继续收敛。讨论原型见 [PR #19](https://github.com/TeaganRicardo/SteamCuratorHub/pull/19) 和[编辑交互说明](https://github.com/TeaganRicardo/SteamCuratorHub/blob/7056f19d4aacd4dcdfffe88cd91ffc9a2dc0c388/docs/ux/round-3.md)。
 
-连接、游戏查找、任务创建、设置、未知结果与备份/发布恢复的后续交互建议见[工作台流程草案](https://github.com/TeaganRicardo/SteamCuratorHub/blob/7056f19d4aacd4dcdfffe88cd91ffc9a2dc0c388/docs/ux/round-4.md)。这些路径用于下一轮讨论，整套正式前端方向仍需用户明确确认。
+连接、游戏查找、任务创建、设置、未知结果与备份/发布恢复的后续交互建议见[工作台流程草案](https://github.com/TeaganRicardo/SteamCuratorHub/blob/7056f19d4aacd4dcdfffe88cd91ffc9a2dc0c388/docs/ux/round-4.md)。用户于 2026-10-29 明确回复“已确认，继续”，确认第四轮整套工作流并授权进入正式前端实现。该确认覆盖连接、查找与任务、运行与成就、研究写作、设置、恢复与发布准备；真实 Steam、API、发布结果与用户视觉验收仍分别验证。实施范围与证据见[正式工作台实现](ux/implementation.md)。
 
 2026-10-17 用户进一步要求自律推进到首版完整功能 MVP，并明确选择 **Gemini API**。本轮实现归属 [MVP #10](https://github.com/TeaganRicardo/SteamCuratorHub/issues/10)，使用说明与实际验收边界见 [MVP.md](MVP.md)。以下“工程默认”是为交付首版采用的可调整实现选择，不表示用户另行确认了对应产品偏好。
 
