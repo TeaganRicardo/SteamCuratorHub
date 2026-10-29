@@ -9,7 +9,7 @@ import { Workspace } from '../workspace.mjs';
 
 const html = await readFile(new URL('../renderer/index.html', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../renderer/app.mjs', import.meta.url), 'utf8');
-const bbcodeSource = await readFile(new URL('../renderer/bbcode.mjs', import.meta.url), 'utf8');
+const richSource = await readFile(new URL('../renderer/rich-text.mjs', import.meta.url), 'utf8');
 const owner = '76561198000000000';
 const copy = value => structuredClone(value);
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -46,10 +46,6 @@ async function harness({ configure, handlers = {} } = {}) {
     get() { return this.querySelector('option[selected]')?.getAttribute('value') ?? this.querySelector('option')?.getAttribute('value') ?? ''; },
     set(value) { for (const option of this.querySelectorAll('option')) option.toggleAttribute('selected', option.getAttribute('value') === String(value)); },
   });
-  window.HTMLTextAreaElement.prototype.setRangeText = function(text, start, end) {
-    this.value = this.value.slice(0, start) + text + this.value.slice(end);
-    this.selectionStart = start; this.selectionEnd = start + text.length;
-  };
   const modal = document.querySelector('#modal');
   modal.showModal = () => { modal.open = true; modal.setAttribute('open', ''); };
   modal.close = () => { modal.open = false; modal.removeAttribute('open'); };
@@ -71,6 +67,7 @@ async function harness({ configure, handlers = {} } = {}) {
       case 'task.create': { const result = workspace.createTask(payload); changed(); return result; }
       case 'draft.save': { const result = workspace.saveDraft(payload); changed(); return result; }
       case 'draft.options': { const result = workspace.saveDraftOptions(payload); changed(); return result; }
+      case 'stats.reconcile': return {readback:nativeSnapshot(workspace.task(payload.taskId).appId),reconciliationId:'fixture-reconciliation'};
       case 'stats.read': case 'stats.acknowledge': return nativeSnapshot(workspace.task(payload.taskId).appId);
       case 'stats.preview': {
         const task = workspace.task(payload.taskId);
@@ -86,11 +83,14 @@ async function harness({ configure, handlers = {} } = {}) {
         workspace.saveResearch(task.id, result, owner); changed(); return result;
       }
       case 'research.cancel': return { cancelled: true };
+      case 'runs.start': runs.push({id:`run-${payload.taskId}`,appId:workspace.task(payload.taskId).appId,state:'running'});return {started:true};
+      case 'runs.stop': runs=runs.map(run=>run.appId===payload.appId?{...run,state:'stopped'}:run);emit({type:'steam.runs',data:runs});return {stopped:true};
+      case 'publication.record': {const result=workspace.recordPublication(payload);changed();return result;}
       case 'publication.prepare': { const result = workspace.preparePublication(payload.taskId, payload.language, payload.kind); changed(); return result; }
       case 'clipboard.write': return { copied: true };
       case 'external.open': return { opened: true };
       case 'settings.save': { workspace.updateSettings(payload.settings || {}); changed(); return snapshot(); }
-      case 'backup.export': case 'backup.import': return { cancelled: true };
+      case 'backup.export': case 'backup.preview': return { cancelled: true };
       case 'app.close-ready': return { closing: payload.allow };
       case 'app.request-close': queueMicrotask(() => emit({ type: 'app.requestClose' })); return { requested: true };
       case 'steam.login': return { state: 'logging_in' };
@@ -111,7 +111,7 @@ async function harness({ configure, handlers = {} } = {}) {
     setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout, console });
   // Execute the actual sources in one isolated browser realm. Only static ESM
   // import/export syntax is adapted; no functions or guards are rewritten.
-  const script = `${bbcodeSource.replace(/^export /gm, '')}\n${appSource.replace(/^import .*from '\.\/bbcode\.mjs';\s*/m, '')}`;
+  const script = `${richSource.replace(/^export /gm, '')}\n${appSource.replace(/^import .*from '\.\/rich-text\.mjs';\s*/m, '')}`;
   await vm.runInContext(`(async () => {\n${script}\n})()`, context, { filename: 'shipped-renderer.mjs' });
   await settle();
   function findButton(label, root = document) {
@@ -122,10 +122,10 @@ async function harness({ configure, handlers = {} } = {}) {
     assert.ok(node, `Missing button: ${label}`); assert.notEqual(node.disabled, true, `Disabled button: ${label}`);
     node.dispatchEvent(new window.Event('click', { bubbles: true })); await settle(); return node;
   }
-  async function nav(name) { await click(document.querySelector(`[data-tab="${name}"]`)); }
+  async function nav(name) { if(name==='research'){await nav('editor');if(!document.querySelector('.sources-pane'))await click('查看资料与建议');return;} await click(document.querySelector(`[data-tab="${name}"]`)); }
   async function input(selector, value, event = 'input') {
     const node = typeof selector === 'string' ? document.querySelector(selector) : selector;
-    assert.ok(node, `Missing field ${selector}`); node.value = value;
+    assert.ok(node, `Missing field ${selector}`); if(node.getAttribute('contenteditable')==='true')node.textContent=value;else node.value = value;
     node.dispatchEvent(new window.Event(event, { bubbles: true })); await settle(); return node;
   }
   async function choose(id) { await input('#task-picker', id, 'change'); }
@@ -136,15 +136,21 @@ async function harness({ configure, handlers = {} } = {}) {
     closeCount: () => closeCount, dispose: () => { timers.clear(); events.clear(); } };
 }
 
-test('actual renderer exposes seven usable pages and task context across navigation', async t => {
+test('workbench retains game selection and parallel runs across game tools and global panels', async t => {
   const h = await harness(); t.after(h.dispose);
-  const expected = { library: '游戏库', tasks: '评测任务', runs: '运行与时长', achievements: '成就与统计', research: '资料研究', editor: '评测编辑', settings: '设置' };
-  assert.equal(h.document.querySelectorAll('[data-tab]').length, 7);
-  for (const [tab, title] of Object.entries(expected)) {
-    await h.nav(tab); assert.equal(h.document.querySelector('#main h1')?.textContent, title);
-    assert.equal(h.document.querySelector('#task-picker').value, h.a.id);
+  assert.equal(h.document.querySelector('#main h1').textContent,'研究与写作');
+  assert.equal(h.document.querySelector('.sources-pane'),null,'writing opens with sources collapsed');
+  const expected = { library:'查找游戏',runs:'运行与时长',achievements:'成就与统计',editor:'研究与写作',publication:'发布准备',settings:'设置' };
+  for(const [tab,title] of Object.entries(expected)){
+    await h.nav(tab);assert.equal(h.document.querySelector('#main h1')?.textContent,title);
+    assert.equal(h.document.querySelector('#task-picker').value,h.a.id);
+    assert.equal(h.document.querySelectorAll('.game-choice').length,2);
+    assert.ok(h.document.querySelector('#run-tray'));
   }
-  assert.equal(h.document.querySelector('#main img'), null, 'game titles are text, never HTML');
+  await h.click(h.document.querySelectorAll('.game-choice')[1]);
+  assert.equal(h.document.querySelector('#main h1').textContent,'研究与写作');
+  assert.equal(h.document.querySelector('#task-picker').value,h.b.id);
+  assert.equal(h.document.querySelector('#main img'),null);
 });
 
 for (const command of ['steam.search', 'steam.library']) test(`late ${command} cannot redraw settings or discard unsaved API inputs`, async t => {
@@ -194,12 +200,12 @@ test('late automatic library after login cannot replace a newer store search', a
     'steam.login': () => { loggedIn = true; return { state: 'connected', steamId: owner, generation: 2 }; },
     'steam.search': () => [{ appId: 1003, name: 'NEW STORE RESULT', steamMinutes: null }],
   } }); t.after(h.dispose);
-  await h.click(h.document.querySelector('#account-button')); await h.click('退出连接并停止运行');
+  await h.click(h.document.querySelector('#account-button')); await h.click('退出连接并停止运行'); await h.click('确认退出连接');
   await h.nav('library'); await h.click(h.document.querySelector('#account-button'));
   await h.input('input[autocomplete="username"]', 'synthetic-user'); await h.input('input[type="password"]', 'synthetic-password');
   await h.click('连接'); await settle(); await settle();
   assert.equal(reads, 2);
-  await h.input('#main select', 'store', 'change'); await h.input('[aria-label="搜索游戏"]', 'New title'); await h.click('搜索');
+  await h.nav('library'); await h.input('#main select', 'store', 'change'); await h.input('[aria-label="搜索游戏"]', 'New title'); await h.click('搜索');
   assert.match(h.document.querySelector('#main').textContent, /NEW STORE RESULT/);
   owned.resolve([{ appId: 1004, name: 'OLD OWNED RESULT', steamMinutes: 20 }]); await settle(); await settle();
   assert.equal(h.document.querySelector('#main select').value, 'store');
@@ -215,9 +221,9 @@ test('login completion preserves a store choice made while authentication was pe
     'steam.login': async () => { await login.promise; loggedIn = true; return { state: 'connected', steamId: owner, generation: 2 }; },
     'steam.search': () => [{ appId: 1003, name: 'STORE CHOICE DURING LOGIN', steamMinutes: null }],
   } }); t.after(h.dispose);
-  await h.click(h.document.querySelector('#account-button')); await h.click('退出连接并停止运行');
+  await h.click(h.document.querySelector('#account-button')); await h.click('退出连接并停止运行'); await h.click('确认退出连接');
   await h.nav('library'); await h.click(h.document.querySelector('#account-button')); await h.click('连接');
-  await h.input('#main select', 'store', 'change'); await h.input('[aria-label="搜索游戏"]', 'Store choice'); await h.click('搜索');
+  await h.nav('library'); await h.input('#main select', 'store', 'change'); await h.input('[aria-label="搜索游戏"]', 'Store choice'); await h.click('搜索');
   await h.nav('settings'); await h.input('[aria-label="AI API 密钥"]', 'synthetic-unsaved-key');
   const input = h.document.querySelector('[aria-label="AI API 密钥"]');
   login.resolve(); await settle(); await settle();
@@ -249,7 +255,7 @@ test('editing autosaves to original task/language and navigation flushes remaini
   await h.input('[aria-label="个人长评正文"]', 'A Chinese text'); await h.timers.fire(700);
   assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text, 'A Chinese text');
   await h.lang('english'); await h.input('[aria-label="个人长评正文"]', 'A English text');
-  await h.choose(h.b.id); await h.input('[aria-label="个人长评正文"]', 'B English text'); await h.nav('tasks');
+  await h.choose(h.b.id); await h.input('[aria-label="个人长评正文"]', 'B English text'); await h.nav('runs');
   assert.equal(h.workspace.task(h.a.id).drafts.english.long.text, 'A English text');
   assert.equal(h.workspace.task(h.b.id).drafts.english.long.text, 'B English text');
   assert.equal(h.workspace.task(h.b.id).drafts.schinese.long.text, '');
@@ -271,7 +277,7 @@ test('account switch rerenders task content while dirty buffers finish saving to
   assert.equal(h.workspace.snapshot().activeSteamId, other);
   assert.equal(h.workspace.task(nextTask.id).drafts.english.long.text, 'New owner English text');
   assert.equal(h.document.querySelector('#account-status .account-id').textContent, other);
-  assert.equal(h.document.querySelector('[aria-label="个人长评正文"]').value, 'New owner English text');
+  assert.equal(h.document.querySelector('[aria-label="个人长评正文"]').textContent, 'New owner English text');
   assert.equal(h.document.querySelector('#task-picker').value, nextTask.id);
   const save = h.calls.find(call => call.command === 'draft.save');
   assert.equal(save.payload.ownerSteamId, owner); assert.equal(save.payload.taskId, h.a.id); assert.equal(save.payload.language, 'english');
@@ -287,17 +293,13 @@ test('account refresh on settings preserves global unsaved API controls', async 
   assert.equal(input.value, 'synthetic-unsaved-key');
 });
 
-test('explicit refresh after login account change also preserves unsaved global API controls', async t => {
-  const login = deferred();
-  const h = await harness({ handlers: { 'steam.login': () => login.promise } }); t.after(h.dispose);
-  h.emit({ type: 'steam.status', data: { state: 'logged_out' } });
-  await h.nav('settings'); await h.input('[aria-label="AI API 密钥"]', 'synthetic-unsaved-after-login');
-  const input = h.document.querySelector('[aria-label="AI API 密钥"]');
-  await h.click(h.document.querySelector('#account-button')); await h.click('连接', h.document.querySelector('#modal'));
-  h.workspace.bindAccount('76561198000000001');
-  login.resolve({ state: 'connected', steamId: '76561198000000001' }); await settle(); await settle();
-  assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]') === input, true);
-  assert.equal(input.value, 'synthetic-unsaved-after-login');
+test('login completion preserves settings typed after leaving the connection panel', async t => {
+  const login=deferred();const h=await harness({handlers:{'steam.login':()=>login.promise}});t.after(h.dispose);
+  h.setSteam({state:'logged_out'});await h.click(h.document.querySelector('#account-button'));await h.click('连接');
+  await h.nav('settings');await h.input('[aria-label="AI API 密钥"]','synthetic-unsaved-after-login');
+  const input=h.document.querySelector('[aria-label="AI API 密钥"]');
+  h.workspace.bindAccount('76561198000000001');login.resolve({state:'connected',steamId:'76561198000000001'});await settle();await settle();
+  assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]'),input);assert.equal(input.value,'synthetic-unsaved-after-login');
 });
 
 test('language change retains its captured target across a save and status refresh', async t => {
@@ -319,6 +321,7 @@ test('language change retains its captured target across a save and status refre
 
 test('Unicode short counter includes spaces/newlines/combined codepoints while link stays separate', async t => {
   const h = await harness(); t.after(h.dispose); await h.nav('editor');
+  await h.click('鉴赏家短评');
   const text = '中A ée\u0301 👩🏽‍💻\n';
   await h.input('[aria-label="鉴赏家短评正文"]', text);
   assert.match(h.document.querySelector('#main').textContent, new RegExp(`${Array.from(text).length} / 199 字`));
@@ -326,7 +329,7 @@ test('Unicode short counter includes spaces/newlines/combined codepoints while l
   await h.click('保存链接与推荐类型'); await h.click('立即保存');
   const draft = h.workspace.task(h.a.id).drafts.schinese;
   assert.equal(draft.short.text, text); assert.ok(draft.fullReviewUrl.includes('/1001/'));
-  await h.input('[aria-label="鉴赏家短评正文"]', '字'.repeat(200)); await h.click('准备鉴赏家短评');
+  await h.input('[aria-label="鉴赏家短评正文"]', '字'.repeat(200)); await h.nav('publication'); await h.click('准备鉴赏家短评');
   assert.equal(h.workspace.task(h.a.id).publications.length, 0); assert.match(h.document.querySelector('#toast').textContent, /少于 200/);
 });
 
@@ -337,30 +340,30 @@ test('editor retains a legacy wrong full link for repair and only freezes a corr
     workspace.saveDraft({ taskId: a.id, language: 'schinese', kind: 'short', text: 'Short body remains unchanged', expectedRevision: 0 });
     workspace.commit(state => { Object.assign(state.tasks[0].drafts.schinese, { fullReviewUrl: wrongOwner, fullReviewUrlNeedsRepair: true }); });
   } }); t.after(h.dispose);
-  await h.nav('editor');
+  await h.nav('editor');await h.click('鉴赏家短评');
   assert.equal(h.document.querySelector('[aria-label="全文链接"]').value, wrongOwner);
-  await h.click('准备鉴赏家短评'); assert.equal(h.workspace.task(h.a.id).publications.length, 0);
+  await h.nav('publication'); await h.click('准备鉴赏家短评'); assert.equal(h.workspace.task(h.a.id).publications.length, 0);await h.nav('editor');
   for (const link of [wrongOwner, ownReview.replace('/1001/', '/999/'), 'https://example.com/review']) {
     await h.input('[aria-label="全文链接"]', link); await h.click('保存链接与推荐类型');
     assert.equal(h.workspace.task(h.a.id).drafts.schinese.fullReviewUrl, wrongOwner);
     assert.match(h.document.querySelector('#toast').textContent, /对应账号、游戏/);
   }
-  await h.input('[aria-label="全文链接"]', ownReview); await h.click('保存链接与推荐类型'); await h.click('准备鉴赏家短评');
+  await h.input('[aria-label="全文链接"]', ownReview); await h.click('保存链接与推荐类型'); await h.nav('publication');await h.click('准备鉴赏家短评');
   const task = h.workspace.task(h.a.id);
   assert.equal(task.publications.length, 1); assert.equal(task.publications[0].fullReviewUrl, ownReview);
   assert.equal(task.drafts.schinese.fullReviewUrlNeedsRepair, false);
   assert.equal(task.drafts.schinese.short.text, 'Short body remains unchanged');
 });
 
-test('BBCode preview treats HTML as text and only opens explicit HTTPS links', async t => {
-  const h = await harness(); t.after(h.dispose); await h.nav('editor');
-  const text = '<img src=x onerror="alert(1)"><script>alert(2)</script>[b]bold[/b][url=javascript:alert(3)]bad[/url][url=https://example.com/review]good[/url]';
-  await h.input('[aria-label="个人长评正文"]', text);
-  const preview = h.document.querySelector('.preview');
-  assert.equal(preview.querySelector('img,script,iframe'), null); assert.match(preview.textContent, /<script>alert\(2\)<\/script>/);
-  assert.equal(preview.querySelector('strong').textContent, 'bold');
-  const links = [...preview.querySelectorAll('a')]; await h.click(links[0]); await h.click(links[1]);
-  assert.deepEqual(h.calls.filter(c => c.command === 'external.open').map(c => c.payload.url), ['https://example.com/review']);
+test('saved long review renders formatted input safely and HTTPS links require a modified click', async t => {
+  const text='<img src=x onerror="alert(1)"><script>alert(2)</script>[b]bold[/b][url=javascript:alert(3)]bad[/url][url=https://example.com/review]good[/url]';
+  const h=await harness({configure(workspace,{a}){workspace.saveDraft({taskId:a.id,language:'schinese',kind:'long',text,expectedRevision:0});}});t.after(h.dispose);
+  const editor=h.document.querySelector('.rich-editor');assert.equal(editor.querySelector('img,script,iframe'),null);
+  assert.match(editor.textContent,/<script>alert\(2\)<\/script>/);assert.equal(editor.querySelector('strong').textContent,'bold');
+  const link=editor.querySelector('a[href="https://example.com/review"]');await h.click(link);
+  assert.equal(h.calls.filter(c=>c.command==='external.open').length,0);
+  const event=new h.window.Event('click',{bubbles:true});event.metaKey=true;link.dispatchEvent(event);await settle();
+  assert.deepEqual(h.calls.filter(c=>c.command==='external.open').map(c=>c.payload.url),['https://example.com/review']);
 });
 
 test('late AI suggestion belongs to its original task and language without overwriting drafts', async t => {
@@ -428,7 +431,7 @@ test('research with known origin applies only to its captured language and revis
   assert.equal(h.workspace.task(h.a.id).drafts.english.long.text, '');
   await h.click('搜集资料并生成长评初稿'); await h.click('将建议稿保存为当前语言长评');
   assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text, 'RESEARCH schinese', 'fresh matching-origin research remains usable');
-  assert.equal(h.document.querySelector('#main h1').textContent, '评测编辑');
+  assert.equal(h.document.querySelector('#main h1').textContent, '研究与写作');
 });
 
 test('failed native items retain their selected changes for inspection', async t => {
@@ -459,7 +462,7 @@ test('late native unknown-result acknowledgement cannot replace another task sna
   const h = await harness({ configure(workspace, { a }) {
     workspace.recordOperation(a.id, owner, { id: 'unknown-operation', state: 'outcome_unknown', changes: {} });
   }, handlers: { 'stats.acknowledge': () => result.promise } }); t.after(h.dispose);
-  await h.nav('achievements'); await h.click('刷新并确认已检查未知结果');
+  await h.nav('achievements'); await h.click('重新读取未知结果');await h.click('已核对回读，解除重试门禁');
   await h.choose(h.b.id); await h.click('读取 / 刷新 Steam 状态');
   result.resolve(nativeSnapshot(1001)); await settle(); await settle();
   assert.ok(h.document.querySelector('[aria-label="选择 ACH_1002"]'));
@@ -488,7 +491,7 @@ test('a conflicted unsaved draft must block close instead of silently discarding
   assert.match(h.document.querySelector('#modal').textContent, /unsaved conflict text/);
   await h.click('复制全部未保存文字');
   assert.match(h.calls.find(c => c.command === 'clipboard.write').payload.text, /unsaved conflict text/);
-  assert.equal(h.document.querySelector('[aria-label="个人长评正文"]').value, 'unsaved conflict text');
+  assert.equal(h.document.querySelector('[aria-label="个人长评正文"]').textContent, 'unsaved conflict text');
   await h.click('放弃本次未保存修改并退出'); await settle();
   assert.deepEqual(h.calls.filter(c => c.command === 'app.close-ready').map(c => c.payload.allow), [false, true]);
   assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text, '', 'only explicit discard may lose the local conflict buffer');
@@ -511,60 +514,45 @@ test('autosave and close share one drain and persist edits made during an in-fli
   assert.deepEqual(h.calls.filter(c => c.command === 'app.close-ready').map(c => c.payload.allow), [true]);
 });
 
-test('one login dialog remains visible from credentials through Guard and success without retaining passwords/codes', async t => {
-  const pending = deferred();
-  const h = await harness({ handlers: { 'steam.login': () => pending.promise } }); t.after(h.dispose);
-  h.setSteam({ state: 'logged_out' }); await h.click(h.document.querySelector('#account-button'));
-  const modal = h.document.querySelector('#modal'); assert.equal(modal.open, true);
-  await h.input('#modal input[autocomplete="username"]', 'synthetic-account');
-  const password = h.document.querySelector('#modal input[type="password"]'); password.value = 'synthetic-only-password';
-  await h.click('连接', modal); assert.equal(password.value, ''); assert.equal(modal.open, true);
-  assert.match(modal.textContent, /synthetic-account/); assert.match(modal.textContent, /正在验证登录/);
-  assert.equal(modal.querySelector('input[type="password"]'), null);
-  h.setSteam({ state: 'guard_required', accountName: 'synthetic-account', guardPrompt: { kind: 'email', domain: '<img onerror=alert(1)>', lastCodeWrong: true } });
-  assert.equal(modal.open, true); assert.equal(modal.querySelector('img'), null);
-  assert.match(modal.textContent, /<img onerror=alert\(1\)>/); assert.match(modal.textContent, /上一个验证码无效/);
-  const code = modal.querySelector('input[autocomplete="one-time-code"]'); code.value = '12345'; await h.click('提交验证码');
-  assert.equal(code.value, ''); assert.equal(modal.open, true);
-  h.setSteam({ state: 'logging_in', accountName: 'synthetic-account' }); assert.match(modal.textContent, /正在验证登录/);
-  h.setSteam({ state: 'connected', steamId: owner, accountName: 'synthetic-account', persistence: 'encrypted' });
-  pending.resolve({ state: 'connected' }); await settle(); await settle();
-  assert.equal(modal.open, true); assert.match(modal.textContent, /已连接/); assert.match(modal.textContent, /会话已加密保存/);
-  assert.equal(modal.textContent.includes('synthetic-only-password'), false); assert.equal(modal.textContent.includes('12345'), false);
+test('connection panel carries credentials through Guard and success without retaining passwords or codes', async t => {
+  const pending=deferred();const h=await harness({handlers:{'steam.login':()=>pending.promise}});t.after(h.dispose);
+  h.setSteam({state:'logged_out'});await h.click(h.document.querySelector('#account-button'));const panel=h.document.querySelector('#main');
+  await h.input('input[autocomplete="username"]','synthetic-account');const password=panel.querySelector('input[type="password"]');password.value='synthetic-only-password';
+  await h.click('连接');assert.equal(password.value,'');assert.match(panel.textContent,/正在验证登录/);assert.equal(panel.querySelector('input[type="password"]'),null);
+  h.setSteam({state:'guard_required',accountName:'synthetic-account',guardPrompt:{kind:'email',domain:'<img onerror=alert(1)>',lastCodeWrong:true}});
+  assert.equal(panel.querySelector('img'),null);assert.match(panel.textContent,/上一个验证码无效/);
+  const code=panel.querySelector('input[autocomplete="one-time-code"]');code.value='12345';await h.click('提交验证码');assert.equal(code.value,'');
+  h.setSteam({state:'connected',steamId:owner,accountName:'synthetic-account',persistence:'encrypted'});pending.resolve({state:'connected'});await settle();await settle();
+  assert.match(panel.textContent,/已连接/);assert.match(panel.textContent,/会话已加密保存/);
+  assert.equal(panel.textContent.includes('synthetic-only-password'),false);assert.equal(panel.textContent.includes('12345'),false);
+  assert.equal(h.document.querySelector('#modal').open,undefined);
 });
 
-test('authentication failures remain inline and retryable; restoring/reconnecting progress and cancel stay visible', async t => {
-  const pending = deferred();
-  const h = await harness({ handlers: { 'steam.login': () => pending.promise } }); t.after(h.dispose);
-  h.setSteam({ state: 'logged_out' }); await h.click(h.document.querySelector('#account-button'));
-  await h.input('#modal input[autocomplete="username"]', 'synthetic-account'); await h.click('连接');
-  h.setSteam({ state: 'error', accountName: 'synthetic-account', error: 'steam_credentials_rejected' });
-  pending.reject(new Error('steam_credentials_rejected')); await settle(); await settle();
-  const modal = h.document.querySelector('#modal');
-  assert.equal(modal.open, true); assert.match(modal.textContent, /Steam 拒绝了登录凭据/);
-  assert.equal(modal.querySelector('input[autocomplete="username"]').value, 'synthetic-account');
-  assert.equal(modal.querySelector('input[type="password"]').value, ''); assert.ok(h.findButton('连接', modal));
-  await h.click('关闭', modal);
-  h.setSteam({ state: 'restoring', accountName: 'saved-account' });
-  assert.match(h.document.querySelector('#statusbar').textContent, /saved-account.*正在恢复已保存会话/);
-  await h.click('查看登录进度'); assert.match(modal.textContent, /正在恢复已保存会话/);
-  h.setSteam({ state: 'reconnecting', accountName: 'saved-account', attempt: 2, maxAttempts: 3 });
-  assert.equal(modal.open, true); assert.match(modal.textContent, /自动重连 2 \/ 3/);
-  await h.click('取消登录'); assert.equal(modal.open, true); assert.ok(h.findButton('连接', modal));
+test('authentication errors stay inline and saved-session recovery exposes credentials only by choice', async t => {
+  const pending=deferred();const h=await harness({handlers:{'steam.login':()=>pending.promise}});t.after(h.dispose);
+  h.setSteam({state:'logged_out'});await h.click(h.document.querySelector('#account-button'));await h.input('input[autocomplete="username"]','synthetic-account');await h.click('连接');
+  h.setSteam({state:'error',accountName:'synthetic-account',error:'steam_credentials_rejected'});pending.reject(new Error('steam_credentials_rejected'));await settle();await settle();
+  const panel=h.document.querySelector('#main');assert.match(panel.textContent,/Steam 拒绝了登录凭据/);
+  assert.equal(panel.querySelector('input[autocomplete="username"]').value,'synthetic-account');assert.equal(panel.querySelector('input[type="password"]').value,'');
+  await h.nav('editor');h.setSteam({state:'restoring',accountName:'saved-account'});assert.match(h.document.querySelector('#account-status').textContent,/saved-account.*正在恢复已保存会话/);
+  await h.click(h.document.querySelector('#account-button'));assert.match(panel.textContent,/正在恢复已保存会话/);
+  h.setSteam({state:'reconnecting',accountName:'saved-account',attempt:2,maxAttempts:3});assert.match(panel.textContent,/自动重连 2 \/ 3/);
+  await h.click('取消登录');assert.ok(h.findButton('连接',panel));
+  h.setSteam({state:'error',restoreAvailable:true,error:'steam_disconnected'});assert.equal(panel.querySelector('input[type="password"]'),null);
+  assert.ok(h.findButton('再次尝试保存的会话'));await h.click('改用账号重新认证');assert.ok(panel.querySelector('input[type="password"]'));
 });
 
-test('a post-login library failure preserves successful authentication feedback', async t => {
-  let failed = false;
-  const h = await harness({ handlers: {
-    'steam.login': () => { h.setSteam({ state: 'connected', accountName: 'synthetic-account', steamId: owner, persistence: 'encrypted' }); failed = true; return { state: 'connected' }; },
-    'steam.library': (payload, context) => { if (failed) throw new Error('steam_library_failed'); return context.defaults('steam.library', payload); }
-  } }); t.after(h.dispose);
-  h.setSteam({ state: 'logged_out' }); await h.click(h.document.querySelector('#account-button')); await h.click('连接');
-  await settle(); await settle();
-  const modal = h.document.querySelector('#modal');
-  assert.match(modal.textContent, /已连接/); assert.match(modal.textContent, /会话已加密保存/);
-  assert.doesNotMatch(modal.textContent, /Steam 连接未完成/);
-  assert.ok(h.findButton('退出连接并停止运行', modal));
+test('logout explains its consequences and only a separate confirmation clears the connection', async t=>{
+  const h=await harness();t.after(h.dispose);await h.click(h.document.querySelector('#account-button'));await h.click('退出连接并停止运行');
+  assert.equal(h.calls.filter(c=>c.command==='steam.logout').length,0);assert.match(h.document.querySelector('#main').textContent,/清除已保存的会话/);
+  await h.click('保留连接');assert.equal(h.calls.filter(c=>c.command==='steam.logout').length,0);
+  await h.click('退出连接并停止运行');await h.click('确认退出连接');assert.equal(h.calls.filter(c=>c.command==='steam.logout').length,1);
+});
+
+test('a post-login library failure preserves successful authentication feedback',async t=>{
+  let failed=false;const h=await harness({handlers:{'steam.login':()=>{h.setSteam({state:'connected',accountName:'synthetic-account',steamId:owner,persistence:'encrypted'});failed=true;return {state:'connected'};},'steam.library':(payload,context)=>{if(failed)throw new Error('steam_library_failed');return context.defaults('steam.library',payload);}}});t.after(h.dispose);
+  h.setSteam({state:'logged_out'});await h.click(h.document.querySelector('#account-button'));await h.click('连接');await settle();await settle();
+  const panel=h.document.querySelector('#main');assert.match(panel.textContent,/已连接/);assert.match(panel.textContent,/会话已加密保存/);assert.ok(h.findButton('退出连接并停止运行',panel));
 });
 
 test('achievement read/preview/apply controls remain usable while the same AppID is running', async t => {
@@ -593,4 +581,159 @@ test('damaged credentials leave offline work usable and recovery requires an exp
   assert.equal(h.calls.filter(call=>call.command==='credentials.reset').length,1);
   assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text,'offline draft still usable');
   assert.doesNotMatch(h.document.querySelector('#main').textContent,/凭据文件需要恢复/);
+});
+
+test('formatted input saves legacy Steam formatting and whole-copy combines the group footer once',async t=>{
+  const footer='[url=https://example.com/curator]群组尾巴[/url]';
+  const h=await harness({configure(workspace){workspace.updateGroups(workspace.snapshot().groups.map(group=>({...group,footers:{...group.footers,schinese:footer}})));}});t.after(h.dispose);
+  const editor=h.document.querySelector('.rich-editor');editor.innerHTML='<h2>标题</h2><p>正文 <strong>加粗</strong> <em>斜体</em></p>';
+  editor.dispatchEvent(new h.window.Event('input',{bubbles:true}));await h.click('立即保存');
+  const saved=h.workspace.task(h.a.id).drafts.schinese.long.text;
+  assert.match(saved,/\[h2\]标题\[\/h2\]/);assert.match(saved,/\[b\]加粗\[\/b\]/);assert.match(saved,/\[i\]斜体\[\/i\]/);
+  assert.equal(saved.includes(footer),false,'footer is composed only at publication/copy boundary');
+  await h.click('复制到 Steam');assert.equal(h.calls.at(-1).command,'clipboard.write');assert.equal(h.calls.at(-1).payload.text,`${saved.trim()}\n\n${footer}`);
+  await h.choose(h.b.id);await h.choose(h.a.id);assert.equal(h.document.querySelector('.rich-editor strong').textContent,'加粗');
+  await h.click('鉴赏家短评');await h.input('[aria-label="鉴赏家短评正文"]','独立短评');await h.click('复制到 Steam');
+  assert.equal(h.calls.at(-1).payload.text,'独立短评');
+});
+
+test('sources drawer and keyboard width controls preserve the current formatted draft',async t=>{
+  const h=await harness();t.after(h.dispose);await h.input('.rich-editor','写作中的正文');await h.click('查看资料与建议');
+  assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text,'写作中的正文');assert.ok(h.document.querySelector('.sources-pane'));
+  for(const [label,key,expected] of [['调整游戏列表宽度','ArrowRight','210'],['调整资料宽度','End','480']]){
+    const bar=h.document.querySelector(`[aria-label="${label}"]`),event=new h.window.Event('keydown',{bubbles:true,cancelable:true});event.key=key;bar.dispatchEvent(event);
+    assert.equal(bar.getAttribute('aria-valuenow'),expected);assert.equal(event.defaultPrevented,true);
+  }
+  await h.click('收起资料');assert.equal(h.document.querySelector('.sources-pane'),null);assert.equal(h.document.querySelector('.rich-editor').textContent,'写作中的正文');
+});
+
+test('persistent run tray stops one game while retaining the other across global panels',async t=>{
+  const h=await harness();t.after(h.dispose);h.setRuns([{id:'alpha',appId:1001,state:'running'},{id:'beta',appId:1002,state:'running'}]);
+  await h.nav('settings');assert.match(h.document.querySelector('#run-tray').textContent,/并行运行 · 2 款/);
+  await h.click('单停',h.document.querySelector('#run-tray'));assert.deepEqual(h.calls.filter(c=>c.command==='runs.stop').map(c=>c.payload.appId),[1001]);
+  assert.match(h.document.querySelector('#run-tray').textContent,/并行运行 · 1 款/);assert.match(h.document.querySelector('#run-tray').textContent,/Beta/);
+  assert.equal(h.document.querySelector('#main h1').textContent,'设置');
+});
+
+test('search details preserve the selected draft and new tasks require an explicit unique group',async t=>{
+  const h=await harness();t.after(h.dispose);await h.input('.rich-editor','在浏览游戏前保留');await h.nav('library');
+  await h.input('#main select','store','change');await h.input('[aria-label="搜索游戏"]','Gamma');await h.click('搜索');await h.click('商店与介绍');
+  assert.equal(h.document.querySelector('#task-picker').value,h.a.id);assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text,'在浏览游戏前保留');
+  await h.click('选择群组建立任务');await h.click('建立任务并打开');assert.equal(h.calls.filter(c=>c.command==='task.create').length,0);
+  const group=[...h.document.querySelectorAll('#main select')].find(node=>node.querySelector('option[value=""]'));await h.input(group,'45525570','change');await h.click('建立任务并打开');
+  const task=h.workspace.snapshot().tasks.find(item=>item.appId===1003);assert.equal(task.groupId,'45525570');assert.equal(h.document.querySelector('#task-picker').value,task.id);assert.equal(h.document.querySelector('#main h1').textContent,'研究与写作');
+});
+
+test('unknown native result needs separate fresh readback and acknowledgement with its exact token',async t=>{
+  const h=await harness({configure(workspace,{a}){workspace.recordOperation(a.id,owner,{id:'uncertain',state:'outcome_unknown',changes:{}});},handlers:{'stats.acknowledge':(payload,context)=>{
+    assert.equal(payload.reconciliationId,'fixture-reconciliation');context.workspace.recordOperation(context.a.id,owner,{id:'uncertain',state:'operator_acknowledged',changes:{}});return nativeSnapshot(1001);
+  }}});t.after(h.dispose);await h.nav('achievements');
+  assert.equal(h.findButton('已核对回读，解除重试门禁'),undefined);await h.click('读取 / 刷新 Steam 状态');assert.equal(h.findButton('已核对回读，解除重试门禁'),undefined);
+  await h.click('重新读取未知结果');assert.equal(h.workspace.task(h.a.id).operations[0].state,'outcome_unknown');assert.equal(h.calls.filter(c=>c.command==='stats.acknowledge').length,0);
+  assert.ok(h.document.querySelector('[aria-label="选择 ACH_1001"]'));await h.click('已核对回读，解除重试门禁');assert.equal(h.workspace.task(h.a.id).operations[0].state,'operator_acknowledged');
+});
+
+test('backup compares both language drafts and stops runs before a separate replacement',async t=>{
+  let preview;
+  const h=await harness({configure(workspace,{a}){workspace.saveDraft({taskId:a.id,language:'schinese',kind:'long',text:'当前中文正文',expectedRevision:0});},handlers:{'backup.preview':(_payload,context)=>{
+    const imported=context.workspace.snapshot();imported.tasks[0].drafts.schinese.long.text='备份中文正文';imported.tasks[0].drafts.english.short.text='Backup English short';preview={previewId:'reviewed-backup',workspace:imported,scope:{currentOtherTasks:2,importedOtherTasks:1,currentOtherRuns:4,importedOtherRuns:3}};return preview;
+  },'backup.restore':(payload,context)=>{assert.equal(payload.previewId,'reviewed-backup');context.workspace.importBackup(preview.workspace);context.changed();return context.snapshot();}}});t.after(h.dispose);
+  h.setRuns([{id:'alpha',appId:1001,state:'running'}]);await h.nav('settings');await h.click('选择备份并比较');
+  const compare=h.document.querySelector('.backup-comparison');assert.match(compare.textContent,/当前中文正文/);assert.match(compare.textContent,/备份中文正文/);assert.match(compare.textContent,/Backup English short/);assert.match(compare.textContent,/其他账号也会被替换：任务 2 → 1 项/);
+  assert.equal(h.calls.filter(c=>c.command==='backup.restore').length,0);assert.equal(h.findButton('确认用此备份替换工作区').disabled,true);
+  await h.click('停止全部运行与研究');assert.equal(h.calls.filter(c=>c.command==='backup.restore').length,0);assert.equal(h.findButton('确认用此备份替换工作区').disabled,false);
+  await h.click('确认用此备份替换工作区');assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text,'备份中文正文');assert.equal(h.document.querySelector('.backup-comparison'),null);
+});
+
+test('publication keeps frozen formatted history and blocks stale filling and unknown duplicate preparation independently',async t=>{
+  const h=await harness();t.after(h.dispose);await h.input('.rich-editor','First frozen body');await h.nav('publication');await h.click('准备个人长评');
+  const attempt=h.workspace.task(h.a.id).publications[0];assert.match(h.document.querySelector('.frozen-body').textContent,/First frozen body/);assert.equal(h.document.querySelector('[aria-label="发布结果链接"]').value,'');
+  await h.nav('editor');await h.input('.rich-editor','New current body');await h.nav('publication');assert.equal(h.findButton('填入冻结内容（不提交）').disabled,true);assert.match(h.document.querySelector('.frozen-body').textContent,/First frozen body/);
+  await h.click('记录已提交 / 结果待核实');assert.equal(h.findButton('准备个人长评').disabled,true);assert.equal(h.findButton('准备鉴赏家短评').disabled,false);
+  await h.click('本人已核对此结果 URL');assert.equal(h.workspace.task(h.a.id).publications[0].state,'submitted_unknown');assert.match(h.document.querySelector('#toast').textContent,/实际发布结果链接/);
+  assert.equal(h.workspace.task(h.a.id).publications[0].id,attempt.id);
+});
+
+for(const action of ['确认退出连接','取消登录'])test(`late ${action} completion preserves settings entered after leaving the connection panel`,async t=>{
+  const logout=deferred();const h=await harness({handlers:{'steam.logout':()=>logout.promise}});t.after(h.dispose);
+  if(action==='取消登录')h.setSteam({state:'reconnecting',attempt:1,maxAttempts:3});
+  await h.click(h.document.querySelector('#account-button'));if(action==='确认退出连接')await h.click('退出连接并停止运行');await h.click(action);
+  await h.nav('settings');await h.input('[aria-label="AI API 密钥"]','keep-on-delayed-logout');const input=h.document.querySelector('[aria-label="AI API 密钥"]');
+  h.setSteam({state:'logged_out'});logout.resolve({state:'logged_out'});await settle();await settle();
+  assert.equal(h.document.querySelector('#main h1').textContent,'设置');assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]'),input);assert.equal(input.value,'keep-on-delayed-logout');
+});
+
+test('late Guard failure preserves settings after the user leaves the connection panel',async t=>{
+  const guard=deferred();const h=await harness({handlers:{'steam.guard':()=>guard.promise}});t.after(h.dispose);h.setSteam({state:'guard_required',guardPrompt:{kind:'email'}});await settle();
+  await h.click('提交验证码');await h.nav('settings');await h.input('[aria-label="AI API 密钥"]','keep-on-guard-error');const input=h.document.querySelector('[aria-label="AI API 密钥"]');
+  guard.reject(new Error('guard_rejected'));await settle();await settle();assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]'),input);assert.equal(input.value,'keep-on-guard-error');
+});
+
+test('backup preview and stop actions preserve settings controls and wait for active AI cancellation',async t=>{
+  const ai=deferred();const h=await harness({handlers:{'ai.format':()=>ai.promise,'backup.preview':(_payload,context)=>({previewId:'ai-backup',workspace:context.workspace.snapshot()}),'research.cancel':()=>{ai.reject(new Error('research_cancelled'));return {cancelled:true};}}});t.after(h.dispose);
+  await h.input('.rich-editor','AI source');await h.click('AI 格式处理');await h.nav('settings');await h.input('[aria-label="AI API 密钥"]','keep-while-comparing');const input=h.document.querySelector('[aria-label="AI API 密钥"]');
+  await h.click('选择备份并比较');assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]'),input);assert.equal(input.value,'keep-while-comparing');assert.equal(h.findButton('确认用此备份替换工作区').disabled,true);
+  await h.click('停止全部运行与研究');await settle();assert.equal(h.calls.filter(c=>c.command==='research.cancel').length,1);assert.equal(h.calls.filter(c=>c.command==='backup.restore').length,0);
+  assert.equal(h.findButton('确认用此备份替换工作区').disabled,false);assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]'),input);assert.equal(input.value,'keep-while-comparing');
+});
+
+test('unknown and imported publication records can inspect only their frozen official target',async t=>{
+  const h=await harness({configure(workspace,{a}){
+    workspace.saveDraft({taskId:a.id,language:'schinese',kind:'long',text:'Frozen body',expectedRevision:0});const attempt=workspace.preparePublication(a.id,'schinese','long');workspace.recordPublication({taskId:a.id,attemptId:attempt.id,state:'submitted_unknown'});
+    workspace.commit(state=>{const record=state.tasks[0].publications[0];record.imported=true;record.resultUrl='https://example.com/misdirection';});
+  },handlers:{init:(_payload,context)=>({...context.snapshot(),fixture:false})}});t.after(h.dispose);await h.nav('publication');
+  assert.equal(h.findButton('打开官方页面'),undefined);assert.equal(h.findButton('填入冻结内容（不提交）').disabled,true);await h.click('打开结果页核对');
+  assert.equal(h.calls.filter(c=>c.command==='publication.open').length,0);assert.equal(h.calls.find(c=>c.command==='external.open').payload.url,`https://steamcommunity.com/profiles/${owner}/recommended/1001/`);
+});
+
+test('malformed imported publication metadata stays available for manual copy without breaking the workbench',async t=>{
+  const h=await harness({configure(workspace){workspace.commit(state=>state.tasks[0].publications.push({id:'old',language:'unknown',kind:'long',text:'Preserved old body',state:'imported_unverified'}));}});t.after(h.dispose);await h.nav('publication');
+  assert.match(h.document.querySelector('#main').textContent,/Preserved old body/);assert.ok(h.findButton('复制原始历史记录'));assert.equal(h.findButton('填入冻结内容（不提交）'),undefined);await h.click('复制原始历史记录');assert.match(h.calls.at(-1).payload.text,/Preserved old body/);
+});
+
+for(const command of ['stats.reconcile','stats.acknowledge'])test(`late ${command} completion preserves settings input while retaining its native result`,async t=>{
+  const response=deferred();const h=await harness({configure(workspace,{a}){workspace.recordOperation(a.id,owner,{id:'pending-unknown',state:'outcome_unknown',changes:{}});},handlers:{[command]:()=>response.promise}});t.after(h.dispose);
+  await h.nav('achievements');await h.click('重新读取未知结果');if(command==='stats.acknowledge')await h.click('已核对回读，解除重试门禁');
+  await h.nav('settings');await h.input('[aria-label="AI API 密钥"]','keep-on-native-readback');const input=h.document.querySelector('[aria-label="AI API 密钥"]');
+  response.resolve(command==='stats.reconcile'?{readback:nativeSnapshot(1001),reconciliationId:'late-native-result'}:nativeSnapshot(1001));await settle();await settle();
+  assert.equal(h.document.querySelector('[aria-label="AI API 密钥"]'),input);assert.equal(input.value,'keep-on-native-readback');
+  await h.nav('achievements');assert.ok(h.document.querySelector('[aria-label="选择 ACH_1001"]'));
+});
+
+for(const command of ['ai.format','research.run'])test(`${command} completion preserves the active editor and uncommitted IME text`,async t=>{
+  const response=deferred();const h=await harness({handlers:{[command]:()=>response.promise}});t.after(h.dispose);
+  await h.input('.rich-editor','已提交正文');if(command==='research.run')await h.click('查看资料与建议');
+  const editor=h.document.querySelector('.rich-editor');await h.click(command==='ai.format'?'AI 格式处理':'搜集资料并生成长评初稿');assert.equal(h.document.querySelector('.rich-editor'),editor);
+  editor.dispatchEvent(new h.window.Event('compositionstart',{bubbles:true}));editor.textContent='已提交正文与拼音输入中';editor.dispatchEvent(new h.window.Event('input',{bubbles:true}));
+  response.resolve(command==='ai.format'?{text:'迟到建议'}:{draft:'迟到研究建议',origin:{taskId:h.a.id,ownerSteamId:owner,language:'schinese',baseRevision:1}});await settle();await settle();
+  assert.equal(h.document.querySelector('.rich-editor'),editor);assert.equal(editor.textContent,'已提交正文与拼音输入中');assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text,'已提交正文');
+  editor.dispatchEvent(new h.window.Event('compositionend',{bubbles:true}));await h.click('立即保存');assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text,'已提交正文与拼音输入中');
+});
+
+test('legacy formatted group footer remains separate during editing and appears once in copy and frozen publication',async t=>{
+  const footer='[s]旧格式署名[/s]\n[url]https://example.com/group[/url]';
+  const h=await harness({configure(workspace,{a}){workspace.updateGroups(workspace.snapshot().groups.map(group=>({...group,footers:{...group.footers,schinese:footer}})));workspace.saveDraft({taskId:a.id,language:'schinese',kind:'long',text:`原有正文\n\n${footer}`,expectedRevision:0});}});t.after(h.dispose);
+  const editor=h.document.querySelector('.rich-editor');assert.equal(editor.textContent,'原有正文');assert.equal(editor.querySelector('s,a'),null,'group footer is separate from editable body');
+  await h.click('AI 格式处理');assert.equal(h.calls.find(call=>call.command==='ai.format').payload.text,'原有正文','AI transforms receive body without embedded legacy footer');
+  editor.append(h.document.createTextNode('，补充一句'));editor.dispatchEvent(new h.window.Event('input',{bubbles:true}));await h.click('立即保存');
+  assert.equal(h.workspace.task(h.a.id).drafts.schinese.long.text,'原有正文，补充一句');await h.click('复制到 Steam');assert.equal(h.calls.at(-1).payload.text.split('旧格式署名').length-1,1);
+  await h.nav('publication');await h.click('准备个人长评');const attempt=h.workspace.task(h.a.id).publications[0];assert.equal(attempt.text.split('旧格式署名').length-1,1);assert.equal(attempt.text,`原有正文，补充一句\n\n${footer}`);
+});
+
+test('pending publication result URL keeps its input node during unrelated updates and text across navigation',async t=>{
+  const h=await harness({configure(workspace,{a}){workspace.saveDraft({taskId:a.id,language:'schinese',kind:'long',text:'Publication body',expectedRevision:0});workspace.preparePublication(a.id,'schinese','long');}});t.after(h.dispose);await h.nav('publication');
+  const pending=`https://steamcommunity.com/profiles/${owner}/recommended/1001/`;const input=await h.input('[aria-label="发布结果链接"]',pending);
+  h.workspace.saveDraft({taskId:h.b.id,language:'english',kind:'long',text:'background unrelated draft',expectedRevision:0});h.emit({type:'workspace.changed'});await settle();await settle();
+  assert.equal(h.document.querySelector('[aria-label="发布结果链接"]'),input,'unrelated workspace refresh must retain the active URL input');assert.equal(input.value,pending);await h.nav('editor');await h.nav('publication');assert.equal(h.document.querySelector('[aria-label="发布结果链接"]').value,pending);
+});
+
+test('comment translation participates in backup cancellation and idle gating',async t=>{
+  const translation=deferred();const h=await harness({configure(workspace,{a}){workspace.saveResearch(a.id,{appId:a.appId,sources:[],reviews:[{review:'A source comment'}],warnings:[]},owner);},handlers:{'ai.translate':()=>translation.promise,'backup.preview':(_payload,context)=>({previewId:'comment-backup',workspace:context.workspace.snapshot()}),'research.cancel':()=>{translation.reject(new Error('research_cancelled'));return {cancelled:true};}}});t.after(h.dispose);
+  await h.click('查看资料与建议');await h.click('翻译此评论');await h.nav('settings');await h.click('选择备份并比较');assert.equal(h.findButton('确认用此备份替换工作区').disabled,true);
+  await h.click('停止全部运行与研究');await settle();assert.equal(h.calls.filter(c=>c.command==='research.cancel').length,1);assert.equal(h.findButton('确认用此备份替换工作区').disabled,false);
+});
+
+test('short publication inspection rejects another curator URL and uses the frozen group target',async t=>{
+  const h=await harness({configure(workspace,{a}){workspace.saveDraft({taskId:a.id,language:'schinese',kind:'short',text:'Short frozen body',expectedRevision:0});const attempt=workspace.preparePublication(a.id,'schinese','short');workspace.recordPublication({taskId:a.id,attemptId:attempt.id,state:'submitted_unknown',resultUrl:'https://store.steampowered.com/curator/99999999/'});},handlers:{init:(_payload,context)=>({...context.snapshot(),fixture:false})}});t.after(h.dispose);await h.nav('publication');await h.click('打开结果页核对');
+  assert.equal(h.calls.find(c=>c.command==='external.open').payload.url,'https://store.steampowered.com/curator/45134494/');assert.equal(h.calls.filter(c=>c.command==='publication.open').length,0);
 });

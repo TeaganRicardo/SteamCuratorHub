@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Workspace, validateFullReviewUrl } from '../workspace.mjs';
+import { Workspace, validateFullReviewUrl, normalizeWorkspace } from '../workspace.mjs';
 import { JsonRepository } from '../repository.mjs';
 
 const account = '76561198000000000';
@@ -116,6 +116,19 @@ test('publication freezes identity/content and blocks late fill or blind retry a
   assert.throws(() => workspace.recordPublication({ taskId: task.id, attemptId: attempt.id, state: 'verified', resultUrl: 'https://steamcommunity.com/x' }), /evidence_required/);
 });
 
+test('manual long publication confirmation requires the frozen account and game result URL', () => {
+  const workspace = new Workspace({ load: () => null, save() {} }); workspace.bindAccount(account);
+  const task = workspace.createTask({ appId: 1001, title: 'Example', groupId: '45134494' });
+  workspace.saveDraft({ taskId: task.id, language: 'english', kind: 'long', text: 'Review', expectedRevision: 0 });
+  const attempt = workspace.preparePublication(task.id, 'english', 'long');
+  for (const resultUrl of [ownReview.replace(account, '76561198000000001'), ownReview.replace('1001', '1002'), 'https://store.steampowered.com/app/1001/']) {
+    assert.throws(() => workspace.recordPublication({ taskId: task.id, attemptId: attempt.id, state: 'user_confirmed', resultUrl }), /long_review_result_url_mismatch/);
+  }
+  assert.equal(workspace.task(task.id).publications[0].state, 'prepared');
+  const saved = workspace.recordPublication({ taskId: task.id, attemptId: attempt.id, state: 'user_confirmed', resultUrl: ownReview.slice(0, -1) });
+  assert.equal(saved.resultUrl, ownReview);
+});
+
 test('disk failure preserves last in-memory state and imported success is not trusted as live verification', () => {
   let fail = false;
   const workspace = new Workspace({ load: () => null, save() { if (fail) throw new Error('disk_full'); } });
@@ -131,6 +144,26 @@ test('disk failure preserves last in-memory state and imported success is not tr
   workspace.importBackup(backup);
   assert.equal(workspace.task(task.id).publications[0].state, 'imported_unverified');
   assert.equal(JSON.stringify(workspace.exportBackup()).includes('SHOULD_NOT_PERSIST'), false);
+});
+
+test('imported publication success keeps its downgrade through preview and restore and gates only its own kind and language', () => {
+  const workspace = new Workspace({ load: () => null, save() {} }); workspace.bindAccount(account);
+  const task = workspace.createTask({ appId: 1001, title: 'Example', groupId: '45134494' });
+  workspace.saveDraft({ taskId: task.id, language: 'english', kind: 'long', text: 'Review', expectedRevision: 0 });
+  workspace.saveDraft({ taskId: task.id, language: 'english', kind: 'short', text: 'Short review', expectedRevision: 0 });
+  workspace.saveDraft({ taskId: task.id, language: 'schinese', kind: 'long', text: '中文长评', expectedRevision: 0 });
+  const attempt = workspace.preparePublication(task.id, 'english', 'long');
+  const resultUrl = `https://steamcommunity.com/profiles/${account}/recommended/1001/`;
+  workspace.recordPublication({ taskId: task.id, attemptId: attempt.id, state: 'user_confirmed', resultUrl });
+  const preview = normalizeWorkspace(workspace.exportBackup());
+  assert.equal(preview.tasks[0].publications[0].state, 'imported_unverified');
+  workspace.importBackup(preview);
+  assert.equal(workspace.task(task.id).publications[0].state, 'imported_unverified');
+  assert.throws(() => workspace.preparePublication(task.id, 'english', 'long'), /needs_verification/);
+  assert.equal(workspace.preparePublication(task.id, 'english', 'short').state, 'prepared');
+  assert.equal(workspace.preparePublication(task.id, 'schinese', 'long').state, 'prepared');
+  workspace.recordPublication({ taskId: task.id, attemptId: attempt.id, state: 'user_confirmed', resultUrl });
+  assert.equal(workspace.preparePublication(task.id, 'english', 'long').state, 'prepared');
 });
 
 test('switching groups replaces any known footer and backup evidence cannot carry credential fields', () => {

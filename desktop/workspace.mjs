@@ -167,7 +167,7 @@ export function normalizeWorkspace(input, { importing = true } = {}) {
     if (JSON.stringify(research).length > 2_000_000) throw new Error('research_too_large');
     const publications = (Array.isArray(task.publications) ? task.publications : []).slice(-100).map(attempt => ({
       ...sanitizeRecord(JSON.parse(JSON.stringify(attempt))), imported: true,
-      state: ['verified', 'user_confirmed'].includes(attempt.state) ? 'imported_unverified' : 'submitted_unknown'
+      state: ['verified', 'user_confirmed', 'imported_unverified'].includes(attempt.state) ? 'imported_unverified' : 'submitted_unknown'
     }));
     const operations = (Array.isArray(task.operations) ? task.operations : []).slice(-100).map(operation => {
       const saved = sanitizeRecord(JSON.parse(JSON.stringify(operation)));
@@ -329,7 +329,7 @@ export class Workspace {
   preparePublication(taskId, lang, kind) {
     const snapshot = this.publicationSnapshot(taskId, lang, kind);
     const task = this.task(taskId);
-    if (task.publications.some(p => p.kind === kind && p.language === lang && ['submitted_unknown'].includes(p.state))) {
+    if (task.publications.some(p => p.kind === kind && p.language === lang && ['submitted_unknown', 'imported_unverified'].includes(p.state))) {
       throw new Error('previous_publication_needs_verification');
     }
     return this.commit(state => {
@@ -347,8 +347,11 @@ export class Workspace {
     const attempt = task.publications.find(p => p.id === attemptId);
     if (!attempt || !['filled', 'submitted_unknown', 'user_confirmed', 'verified', 'failed'].includes(value)) throw new Error('invalid_publication');
     if (['verified', 'user_confirmed'].includes(value) && !resultUrl) throw new Error('result_url_required');
-    const url = resultUrl ? publicHttps(resultUrl, ['steamcommunity.com', 'store.steampowered.com']) : '';
+    let url = resultUrl ? publicHttps(resultUrl, ['steamcommunity.com', 'store.steampowered.com']) : '';
     if (value === 'verified' && evidenceSource !== 'steam_api_readback') throw new Error('verification_evidence_required');
+    if (attempt.kind === 'long' && ['verified', 'user_confirmed'].includes(value)) {
+      url = validateFullReviewUrl(url, attempt.ownerSteamId, attempt.appId);
+    }
     return this.commit(state => {
       const saved = state.tasks.find(t => t.id === taskId).publications.find(p => p.id === attemptId);
       Object.assign(saved, { state: value, resultUrl: url, evidenceSource: text(evidenceSource, 100), updatedAt: now() }); return saved;

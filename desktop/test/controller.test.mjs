@@ -143,15 +143,43 @@ test('Steam generation change cancels research and draft transforms, clears prev
   assert.equal(s.workspace.task(s.task.id).drafts.english.long.text, '');
 });
 
-test('unknown operation requires a fresh matching-account readback before user acknowledgement', async () => {
+test('unknown native readback and acknowledgement are separate and require a matching fresh token', async () => {
   const s = setup();
   s.workspace.recordOperation(s.task.id, ACCOUNT, { id: 'uncertain', state: 'outcome_unknown' });
+  await assert.rejects(s.controller.invoke('stats.acknowledge', { taskId: s.task.id, operationId: 'uncertain' }), /readback_required/);
   s.snapshot.accountId = OTHER;
-  await assert.rejects(s.controller.invoke('stats.acknowledge', { taskId: s.task.id, operationId: 'uncertain' }), /account_mismatch/);
+  await assert.rejects(s.controller.invoke('stats.reconcile', { taskId: s.task.id, operationId: 'uncertain' }), /account_mismatch/);
   assert.equal(s.workspace.task(s.task.id).operations[0].state, 'outcome_unknown');
   s.snapshot.accountId = ACCOUNT;
-  await s.controller.invoke('stats.acknowledge', { taskId: s.task.id, operationId: 'uncertain' });
+  const result = await s.controller.invoke('stats.reconcile', { taskId: s.task.id, operationId: 'uncertain' });
+  assert.equal(result.readback.accountId, ACCOUNT);
+  assert.equal(s.workspace.task(s.task.id).operations[0].state, 'outcome_unknown');
+  s.native.read = () => { throw new Error('ack_must_not_repeat_readback'); };
+  await s.controller.invoke('stats.acknowledge', { taskId: s.task.id, operationId: 'uncertain', reconciliationId: result.reconciliationId });
   assert.equal(s.workspace.task(s.task.id).operations[0].state, 'operator_acknowledged');
+  assert.deepEqual(s.workspace.task(s.task.id).operations[0].readback, result.readback);
+});
+
+test('native reconciliation tokens expire with account generation or a changed unknown operation', async () => {
+  const s = setup();
+  s.workspace.recordOperation(s.task.id, ACCOUNT, { id: 'uncertain', state: 'outcome_unknown' });
+  const first = await s.controller.invoke('stats.reconcile', { taskId: s.task.id, operationId: 'uncertain' });
+  s.workspace.recordOperation(s.task.id, ACCOUNT, { id: 'uncertain', state: 'outcome_unknown', updatedAt: 'later' });
+  await assert.rejects(s.controller.invoke('stats.acknowledge', { taskId: s.task.id, operationId: 'uncertain', reconciliationId: first.reconciliationId }), /readback_required/);
+  const second = await s.controller.invoke('stats.reconcile', { taskId: s.task.id, operationId: 'uncertain' });
+  s.setSteamStatus({ state: 'connected', steamId: ACCOUNT, generation: 1 });
+  await s.controller.steamEvent({ type: 'steam.status', data: s.steam.status() });
+  await assert.rejects(s.controller.invoke('stats.acknowledge', { taskId: s.task.id, operationId: 'uncertain', reconciliationId: second.reconciliationId }), /readback_required/);
+  assert.equal(s.workspace.task(s.task.id).operations[0].state, 'outcome_unknown');
+});
+
+test('a changed unknown operation while readback is pending cannot authorize acknowledgement', async () => {
+  const s = setup(); const read = deferred(); s.native.read = () => read.promise;
+  s.workspace.recordOperation(s.task.id, ACCOUNT, { id: 'uncertain', state: 'outcome_unknown' });
+  const pending = s.controller.invoke('stats.reconcile', { taskId: s.task.id, operationId: 'uncertain' });
+  const rejected = assert.rejects(pending, /operation_context_changed/);
+  s.workspace.recordOperation(s.task.id, ACCOUNT, { id: 'uncertain', state: 'operator_acknowledged' });
+  read.resolve(structuredClone(s.snapshot)); await rejected;
 });
 
 test('failed credential update does not pair a newly saved provider endpoint with the old API key', async () => {
