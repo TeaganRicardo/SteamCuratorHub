@@ -9,7 +9,7 @@ GitHub 是唯一基线，需求状态以 [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 | 工作 | 分支 / 提交 | 记录与状态 |
 | --- | --- | --- |
 | 本轮源码基线（`main`） | `21aeb3e8f6baffb57ea439d783bff943add2408f` | [PR #20](https://github.com/TeaganRicardo/SteamCuratorHub/pull/20) 已合并用户确认需求与交付状态；生产代码承接 [PR #18](https://github.com/TeaganRicardo/SteamCuratorHub/pull/18) 的时长修复 |
-| 正式游戏工作台 | `codex/formal-workbench-20261029` | [实施范围](docs/ux/implementation.md)已按用户最终确认接入生产服务，验证与独立复核进行中 |
+| 正式游戏工作台 | `codex/formal-workbench-20261029` | [草稿 PR #21](https://github.com/TeaganRicardo/SteamCuratorHub/pull/21) 已按用户最终确认接入生产服务；282/282 本机测试、源码 Electron fixture 和独立复核完成；安装包与 CI 记录见 PR，[实施范围](docs/ux/implementation.md)保留真实验收门槛 |
 | 会话与并行操作修复（`main` 历史提交） | `ba47a2b23ef4553aa5db5594eaa4aff4a26da1c7` | [PR #17](https://github.com/TeaganRicardo/SteamCuratorHub/pull/17) 已于 2026-10-18 合并；[对应主线 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39151447941) |
 | 时长回读一致性修复 | 最终 PR head `60ddf0d540426e300b02889a4e298c46f9403b2b` | [PR #18](https://github.com/TeaganRicardo/SteamCuratorHub/pull/18) 已合并；修复、独立审查、本机构建与[七项 CI 成功](https://github.com/TeaganRicardo/SteamCuratorHub/actions/runs/39631664594)均对应此 head |
 | 正式前端交互原型 | `prototype/ux-direction-20261021`；`7056f19d4aacd4dcdfffe88cd91ffc9a2dc0c388` | [草稿 PR #19](https://github.com/TeaganRicardo/SteamCuratorHub/pull/19) 保留可操作草图与历史验证记录；2026-10-29 整套方向已获确认，正式实现另见本轮分支 |
