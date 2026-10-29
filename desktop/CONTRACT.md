@@ -12,6 +12,8 @@ Events `steam.status`, `steam.guard`, `steam.runs`. Passwords and Guard codes st
 
 `dataDirectory:null` prevents upstream auth files. `autoRelogin:false` is intentional: the application owns a bounded authentication retry budget (1/3/10 second delays, three attempts, 120 second timeout per attempt; reset after a healthy minute). Only known transient results/network codes with a reusable token can retry; rejected/expired authentication clears that token, while conflicts require user action. Disconnect/conflict/suspend invalidates owned async work and freezes runs; restored authentication never resubmits `gamesPlayed`. Single stop sends the complete remaining active AppID set. Explicit `logout()` clears the reusable session; `close()` cleans protocol ownership while preserving the encrypted session for next launch. Logout cleanup and failed credential deletion are separately reported. Demo runs retain fixture provenance in a separate workspace.
 
+Each playtime readback is compared with both the run baseline and its previous observation. A lower reading remains the actual observed value, is labelled inconsistent, and interrupts active runs through the existing unknown-result cleanup path even when it exceeds the starting baseline. Unchanged counters remain valid observations. This interruption does not schedule authentication recovery or resume playing requests.
+
 ## NativeStatsService (`desktop/services/native-stats.mjs`)
 
 Named export `NativeStatsService`, constructor `{binaryPath?, steamLibraryPath?, fixture?, onEvent?}`.
